@@ -748,6 +748,10 @@ let BG=[],LISTS=[],curL=localStorage.getItem('bglist')||'all';
 /* القوائم والروابط تُحفظ كملفات JSON داخل مخزن الخلفيات نفسه، فلا حاجة لأي جداول جديدة */
 const PUB=SB_URL+'/storage/v1/object/public/backgrounds/';
 async function readJson(name,def){try{const r=await fetch(PUB+name+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return def;const j=await r.json();return j&&typeof j==='object'?j:def}catch(e){return def}}
+const POLICY_SQL=`drop policy if exists "owner manage backgrounds storage" on storage.objects;
+create policy "owner manage backgrounds storage" on storage.objects for all to authenticated
+using (bucket_id='backgrounds' and exists (select 1 from public.staff s where s.email=(auth.jwt()->>'email') and s.role='owner'))
+with check (bucket_id='backgrounds' and exists (select 1 from public.staff s where s.email=(auth.jwt()->>'email') and s.role='owner'));`;
 async function writeJson(name,obj){
  if(!await fresh())throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
  const u=SB_URL+'/storage/v1/object/backgrounds/'+name,body=JSON.stringify(obj);
@@ -756,7 +760,9 @@ async function writeJson(name,obj){
  let r=await fetch(u,{method:'POST',headers:{...h,'x-upsert':'true'},body});
  if(!r.ok)r=await fetch(u,{method:'PUT',headers:h,body});   // تحديث الملف الموجود
  if(!r.ok){let m='';try{const j=await r.json();m=j.message||j.error||''}catch(e){}
-  throw new Error((r.status===400||r.status===401||r.status===403?'ليست لديك صلاحية الحفظ (للمالك فقط)':'تعذّر الحفظ ('+r.status+')')+(m?' — '+m:''))}
+  const perm=r.status===400||r.status===401||r.status===403;
+  if(perm){try{await navigator.clipboard.writeText(POLICY_SQL)}catch(e){}}
+  throw new Error((perm?'ليست لديك صلاحية الحفظ في Supabase. الصق كود SQL (نُسخ إلى حافظتك) في: Supabase ← SQL Editor ← Run، ثم أعد المحاولة':'تعذّر الحفظ ('+r.status+')')+(m?' — '+m:''))}
 }
 const parseBg=x=>{const m=/^@@(\w+)@@([\s\S]*)$/.exec(x.name||'');return m?{id:m[1],n:m[2]}:{id:null,n:x.name||''}};
 const dn=n=>{try{n=decodeURI(n)}catch(e){}return String(n||'').replace(/^.*\//,'').replace(/\.[a-z0-9]+$/i,'')||'خلفية'};
