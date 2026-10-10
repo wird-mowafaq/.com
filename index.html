@@ -288,10 +288,16 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
    <div id="astaffbox" hidden>
     <h3>الأدمن</h3><div id="astaff"></div>
     <input id="sname" placeholder="اسم الأدمن الجديد">
-    <input id="scode" dir="ltr" placeholder="كود الأدمن (6 خانات فأكثر)">
+    <input id="scode" dir="ltr" placeholder="كود الأدمن (8 خانات فأكثر: حروف وأرقام)">
     <button id="sadd" class="btn">➕ تعيين أدمن</button>
    </div>
-   <button id="alogout" class="btn red" style="margin-top:14px">تسجيل الخروج</button>
+   <div id="achbox" hidden>
+     <h3>🔑 تغيير كود الدخول (للمالك)</h3>
+     <input id="ncode" dir="ltr" placeholder="الكود الجديد (8 خانات فأكثر: حروف وأرقام)" autocomplete="off">
+     <button id="ngen" class="btn">🎲 توليد كود قوي</button>
+     <button id="nchg" class="btn">💾 حفظ الكود الجديد</button>
+    </div>
+    <button id="alogout" class="btn red" style="margin-top:14px">تسجيل الخروج</button>
   </div>
   <div id="astat"></div>
  </div>
@@ -744,10 +750,13 @@ const PUB=SB_URL+'/storage/v1/object/public/backgrounds/';
 async function readJson(name,def){try{const r=await fetch(PUB+name+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return def;const j=await r.json();return j&&typeof j==='object'?j:def}catch(e){return def}}
 async function writeJson(name,obj){
  if(!await fresh())throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
- const u=SB_URL+'/storage/v1/object/backgrounds/'+name;
- try{await fetch(u,{method:'DELETE',headers:jh()})}catch(e){}
- const r=await fetch(u,{method:'POST',headers:{apikey:SB.key,Authorization:'Bearer '+sess.access_token,'Content-Type':'application/json','cache-control':'max-age=0'},body:JSON.stringify(obj)});
- if(!r.ok)throw new Error(r.status===400||r.status===403?'ليست لديك صلاحية الحفظ (للمالك فقط)':'تعذّر الحفظ ('+r.status+')');
+ const u=SB_URL+'/storage/v1/object/backgrounds/'+name,body=JSON.stringify(obj);
+ const h={apikey:SB.key,Authorization:'Bearer '+sess.access_token,'Content-Type':'application/json','cache-control':'max-age=0'};
+ /* كتابة مباشرة فوق الملف (upsert) بدل حذفه ثم رفعه: الحذف كان يفشل صامتًا فيرفض الرفع بخطأ 400 «الملف موجود» */
+ let r=await fetch(u,{method:'POST',headers:{...h,'x-upsert':'true'},body});
+ if(!r.ok)r=await fetch(u,{method:'PUT',headers:h,body});   // تحديث الملف الموجود
+ if(!r.ok){let m='';try{const j=await r.json();m=j.message||j.error||''}catch(e){}
+  throw new Error((r.status===400||r.status===401||r.status===403?'ليست لديك صلاحية الحفظ (للمالك فقط)':'تعذّر الحفظ ('+r.status+')')+(m?' — '+m:''))}
 }
 const parseBg=x=>{const m=/^@@(\w+)@@([\s\S]*)$/.exec(x.name||'');return m?{id:m[1],n:m[2]}:{id:null,n:x.name||''}};
 const dn=n=>{try{n=decodeURI(n)}catch(e){}return String(n||'').replace(/^.*\//,'').replace(/\.[a-z0-9]+$/i,'')||'خلفية'};
@@ -795,7 +804,7 @@ async function saveLists(){await writeJson('meta/lists.json',{v:1,lists:LISTS})}
 async function renderPanel(){
  $('admlogin').hidden=true;$('admmain').hidden=false;
  $('admtitle').textContent=isOwner()?'👑 لوحة المالك':'🛠 لوحة الأدمن';
- $('abgbox').hidden=!(isOwner()||can('up')||can('del'));$('astaffbox').hidden=!isOwner();$('nstats').hidden=!can('stats');
+ $('abgbox').hidden=!(isOwner()||can('up')||can('del'));$('astaffbox').hidden=!isOwner();$('achbox').hidden=!isOwner();$('nstats').hidden=!can('stats');
  await loadBackgrounds();await renderLists();fillUpSel();await renderBgs();
  if(isOwner()){await renderStaff();renderCount()}else $('acount').hidden=true;
 }
@@ -938,6 +947,28 @@ function openAdm(){
  if(!SB_ON){$('admlogin').hidden=true;$('admmain').hidden=true;astat('الدخول غير مفعّل بعد: ضع رابط Supabase والمفتاح في SB أعلى الملف.',1);return}
  if(sess){$('admlogin').hidden=true;enter()}else{$('admlogin').hidden=false;$('admmain').hidden=true;$('admtitle').textContent='🔐 الدخول'}
 }
+const strongCode=c=>/^(?=.*[A-Za-z\u0600-\u06FF])(?=.*\d).{8,}$/.test(String(c||''));
+function genCode(){const A='abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ',D='23456789',all=A+D;let c;
+ do{const b=crypto.getRandomValues(new Uint8Array(12));c=[...b].map(x=>all[x%all.length]).join('')}while(!(/[A-Za-z]/.test(c)&&/\d/.test(c)));return c}
+async function changeCode(nc){
+ if(!isOwner())throw new Error('تغيير الكود من هنا للمالك فقط');
+ if(!strongCode(nc))throw new Error('الكود الجديد: 8 خانات فأكثر وفيه حروف وأرقام');
+ const oldMail=me(),newMail=await mail(nc);
+ if(oldMail===newMail)throw new Error('هذا هو كودك الحالي');
+ const cur=perm||{};
+ await fetch(SB_URL+'/auth/v1/signup',{method:'POST',headers:{apikey:SB.key,'Content-Type':'application/json'},body:JSON.stringify({email:newMail,password:nc})}).catch(()=>{});
+ await api('/rest/v1/staff',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({email:newMail,name:cur.name||'المالك',role:cur.role,up:!!cur.up,del:!!cur.del,stats:!!cur.stats})});
+ try{await api('/rest/v1/staff?email=eq.'+encodeURIComponent(oldMail),{method:'DELETE',headers:{Prefer:'return=minimal'}})}
+ catch(e){throw new Error('أُضيف الكود الجديد لكن تعذّر حذف القديم: '+e.message)}
+ await signIn(nc);
+}
+$('ngen').onclick=()=>{$('ncode').value=genCode();astat('انسخ الكود واحفظه في مكان آمن قبل الضغط على «حفظ»')};
+$('nchg').onclick=async()=>{
+ const nc=$('ncode').value.trim();
+ if(!confirm('سيُستبدل كود دخولك الحالي بالجديد فورًا. هل حفظت الكود الجديد؟'))return;
+ astat('جارٍ تغيير الكود…');
+ try{await changeCode(nc);$('ncode').value='';await enter();astat('تم تغيير الكود ✓ — استخدم الكود الجديد من الآن')}catch(e){astat(e.message,1)}
+};
 $('staffbtn').onclick=openAdm;
 $('admx').onclick=()=>{$('adm').hidden=true};
 $('alogin').onclick=async()=>{
@@ -949,7 +980,7 @@ $('apw').onkeydown=e=>{if(e.key==='Enter')$('alogin').click()};
 $('alogout').onclick=()=>{dropSess();perm=null;setTimeout(gateCheck,0);$('nstats').hidden=true;$('admmain').hidden=true;$('admlogin').hidden=false;$('admtitle').textContent='🔐 الدخول';astat('تم تسجيل الخروج')};
 $('sadd').onclick=async()=>{
  const name=$('sname').value.trim(),code=$('scode').value;
- if(!name||code.length<6){astat('اكتب اسم الأدمن وكودًا من 6 خانات على الأقل',1);return}
+ if(!name||!strongCode(code)){astat('اكتب اسم الأدمن وكودًا قويًا: 8 خانات فأكثر وفيه حروف وأرقام',1);return}
  try{await api('/rest/v1/staff',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({email:await mail(code),name,role:'admin',up:true,del:false})});
   $('sname').value='';$('scode').value='';astat('تم تعيين الأدمن ✓ — أعطه الكود ليدخل به');renderStaff()}
  catch(e){astat(/duplicate|23505/.test(e.message)?'هذا الكود مستخدم، اختر كودًا آخر':e.message,1)}
@@ -1475,20 +1506,21 @@ $('ssend').onclick=async()=>{
 const ICON=u=>/instagram/i.test(u)?'📸':/youtu/i.test(u)?'▶️':/tiktok/i.test(u)?'🎵':/twitter|x\.com/i.test(u)?'🐦':/t\.me|telegram/i.test(u)?'✈️':/wa\.me|whatsapp/i.test(u)?'💬':/facebook|fb\.com/i.test(u)?'📘':/snapchat/i.test(u)?'👻':'🔗';
 let LINKS=[];
 const saveLinks=()=>writeJson('meta/links.json',{v:1,links:LINKS});
-async function renderSide(){
- const box=$('slinks');box.textContent='جارٍ التحميل…';$('sedit').hidden=!isOwner();
- const j=await readJson('meta/links.json',{links:[]});
- LINKS=(Array.isArray(j.links)?j.links:[]).filter(x=>x&&x.title&&/^https?:\/\//i.test(x.url));
+async function renderSide(local){
+ const box=$('slinks');$('sedit').hidden=!isOwner();
+ if(!local){box.textContent='جارٍ التحميل…';
+  const j=await readJson('meta/links.json',{links:[]});
+  LINKS=(Array.isArray(j.links)?j.links:[]).filter(x=>x&&x.title&&/^https?:\/\//i.test(x.url))}
  box.innerHTML='';if(!LINKS.length)box.innerHTML='<p class="ld">لم تُضَف حسابات بعد.</p>';
  LINKS.forEach((x,i)=>{const row=document.createElement('div');row.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:8px';
   const a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener noreferrer';a.className='btn';a.style.cssText='flex:1;text-align:start;text-decoration:none;display:block;margin:0';a.textContent=ICON(x.url)+' '+x.title;row.append(a);
-  if(isOwner())row.append(mkbtn('✕',1,async()=>{try{LINKS.splice(i,1);await saveLinks();renderSide()}catch(e){banner(e.message);renderSide()}}));
+  if(isOwner())row.append(mkbtn('✕',1,async()=>{try{LINKS.splice(i,1);await saveLinks();renderSide(true)}catch(e){banner(e.message);renderSide()}}));
   box.append(row)});
 }
 $('sidebtn').onclick=()=>{$('side').hidden=false;renderSide()};
 $('sidex').onclick=()=>{$('side').hidden=true};$('side').onclick=e=>{if(e.target===$('side'))$('side').hidden=true};
 $('lsave').onclick=async()=>{const t=$('ltitle').value.trim(),u=$('lurl').value.trim();if(!t||!/^https?:\/\//i.test(u))return banner('اكتب الاسم ورابطًا يبدأ بـ https://');
- try{LINKS.push({title:t,url:u});await saveLinks();$('ltitle').value='';$('lurl').value='';renderSide()}catch(e){banner(e.message);renderSide()}};
+ try{LINKS.push({title:t,url:u});await saveLinks();$('ltitle').value='';$('lurl').value='';renderSide(true)}catch(e){banner(e.message);renderSide()}};
 /* تنزيل فيديو: صوت الآيات + الخلفية + النص بالخط العثماني. المسار السريع (WebCodecs) يُنشئ الملف أسرع من مدة التلاوة، وإلا يُسجَّل بالزمن الحقيقي */
 const vfont='Amiri Quran';
 function fitText(x,text,mw,mh,font,K=1){const hi=Math.round(60*K),lo=Math.round(22*K),step=Math.max(2,Math.round(2*K));
