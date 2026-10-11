@@ -892,6 +892,14 @@ async function moveBg(x,newId){
  await api('/rest/v1/backgrounds?id=eq.'+x.id,{method:'DELETE',headers:{Prefer:'return=minimal'}});
 }
 /* حذف خلفية: نحذف السجل أولًا (فيختفي من الموقع فورًا) ثم الملف من التخزين. يعيد false إن بقي الملف في التخزين */
+async function renameBg(x,nn){
+ const nm=(x.l?'@@'+x.l+'@@':'')+nn;
+ try{const r=await api('/rest/v1/backgrounds?id=eq.'+x.id,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({name:nm})});
+  if(Array.isArray(r)&&r.length)return}catch(e){}
+ // إن لم يُسمح بالتعديل المباشر: نُدرج سجلًا بالاسم الجديد ثم نحذف القديم (الملف نفسه لا يُمس)
+ await api('/rest/v1/backgrounds',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name:nm,path:x.path,url:x.url})});
+ await api('/rest/v1/backgrounds?id=eq.'+x.id,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+}
 async function delBg(x){
  const r=await api('/rest/v1/backgrounds?id=eq.'+x.id,{method:'DELETE',headers:{Prefer:'return=representation'}});
  if(!Array.isArray(r)||!r.length)throw new Error('لم تُحذف الخلفية: ليست لديك صلاحية الحذف');
@@ -930,6 +938,8 @@ async function renderBgs(){
    const t=document.createElement('div');t.className='t';t.textContent=dn(x.n);row.append(v,t);
    if(isOwner()&&LISTS.length){const m=document.createElement('select');m.style.cssText='width:auto;max-width:110px;margin:0';m.add(new Option('نقل إلى…',''));LISTS.forEach(l=>{if(l.id!==g.id)m.add(new Option(l.name,l.id))});if(g.id!==null)m.add(new Option('بلا قائمة','none'));
     m.onchange=async()=>{if(!m.value)return;try{await moveBg(x,m.value==='none'?null:m.value);await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}};row.append(m)}
+   if(isOwner()||can('up'))row.append(mkbtn('✏ تسمية',0,async()=>{const cur=dn(x.n),nn=(prompt('الاسم الجديد للخلفية:',cur)||'').trim();if(!nn||nn===cur)return;
+    try{await renameBg(x,nn.slice(0,80));astat('تم تغيير الاسم ✓');await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}}));
    if(can('del'))row.append(mkbtn('حذف',1,async()=>{if(!confirm('حذف هذه الخلفية؟'))return;
     try{const ok=await delBg(x);astat(ok?'تم حذف الخلفية ✓':'حُذفت الخلفية، لكن تعذّر حذف الملف من التخزين',!ok);await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}}));
    box.append(row);
