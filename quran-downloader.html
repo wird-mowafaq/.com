@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تنزيل التلاوات</title>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f3f6f4; --card:#ffffff; --ink:#14302a; --muted:#5d7a72;
+    --line:#d5e2dc; --accent:#0f6b55; --accent-ink:#ffffff; --warn:#a4452c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0d1a17; --card:#14261f; --ink:#e6f2ed; --muted:#8fb0a5; --line:#254238; --accent:#3fbf99; --accent-ink:#06231b; --warn:#ef8a6e; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Tajawal',system-ui,sans-serif;line-height:1.6;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:880px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-family:'Amiri',serif;font-size:2rem;margin:8px 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .row{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:640px){.row{grid-template-columns:1fr 1fr}}
+  label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+  select,input[type=search]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+  select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 6px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+  button:disabled{opacity:.5;cursor:default}
+  .count{color:var(--muted);margin-inline-start:auto;font-size:.9rem}
+  .list{margin-top:10px;max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
+  .item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:0}
+  .item .num{width:2.2em;color:var(--muted);font-variant-numeric:tabular-nums}
+  .item .name{flex:1;font-family:'Amiri',serif;font-size:1.2rem}
+  .item .st{font-size:.8rem;color:var(--muted);min-width:5.5em;text-align:left}
+  .item .st.err{color:var(--warn)}
+  .prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+  .prog>i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
+  .note{color:var(--muted);font-size:.85rem;margin-top:14px}
+  .msg{padding:14px;color:var(--muted)}
+  input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>تنزيل التلاوات</h1>
+  <p class="sub">اختر القارئ ثم حمّل أي سورة أو عدّة سور مباشرة.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label for="q">ابحث عن قارئ</label>
+        <input id="q" type="search" placeholder="اكتب اسم القارئ" autocomplete="off">
+      </div>
+      <div>
+        <label for="reciter">القارئ</label>
+        <select id="reciter"><option>جارٍ التحميل…</option></select>
+      </div>
+      <div>
+        <label for="moshaf">الرواية / المصحف</label>
+        <select id="moshaf"></select>
+      </div>
+      <div>
+        <label for="speed">سرعة التنزيل (اتصالات متوازية)</label>
+        <select id="speed">
+          <option value="4">متوازنة (4)</option>
+          <option value="8" selected>سريعة (8)</option>
+          <option value="16">أقصى سرعة (16)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="bar">
+      <button id="all">تحديد الكل</button>
+      <button id="none">إلغاء التحديد</button>
+      <button id="dl" class="primary">تنزيل المحدد</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="prog" aria-hidden="true"><i id="total"></i></div>
+
+    <div class="list" id="list"><div class="msg">اختر قارئًا لعرض السور.</div></div>
+    <p class="note">يُقسَّم كل ملف إلى أجزاء تُحمَّل في وقت واحد ثم تُجمَّع، وهذا أسرع بكثير من التنزيل العادي. إن منع المتصفح التنزيل المتوازي لأي ملف، يُفتح الرابط المباشر تلقائيًا.</p>
+  </div>
+</div>
+
+<script>
+const API = 'https://www.mp3quran.net/api/v3';
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(3, '0');
+
+let reciters = [], suwar = [], current = null;
+
+// ---------- تحميل البيانات ----------
+async function init(){
+  try{
+    const [r, s] = await Promise.all([
+      fetch(`${API}/reciters?language=ar`).then(x => x.json()),
+      fetch(`${API}/suwar?language=ar`).then(x => x.json())
+    ]);
+    reciters = r.reciters || [];
+    suwar = s.suwar || [];
+    fillReciters('');
+  }catch(e){
+    $('reciter').innerHTML = '<option>تعذّر تحميل القراء، تحقق من الاتصال</option>';
+  }
+}
+
+function fillReciters(term){
+  const t = term.trim();
+  const list = reciters.filter(r => !t || r.name.includes(t));
+  $('reciter').innerHTML = list.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  onReciter();
+}
+
+function onReciter(){
+  const r = reciters.find(x => String(x.id) === $('reciter').value);
+  if(!r){ $('moshaf').innerHTML = ''; $('list').innerHTML = '<div class="msg">لا توجد نتائج.</div>'; return; }
+  $('moshaf').innerHTML = r.moshaf.map((m, i) => `<option value="${i}">${m.name}</option>`).join('');
+  onMoshaf();
+}
+
+function onMoshaf(){
+  const r = reciters.find(x => String(x.id) === $('reciter').value);
+  if(!r) return;
+  const m = r.moshaf[+$('moshaf').value];
+  const ids = m.surah_list.split(',').map(Number);
+  current = { reciter: r.name, server: m.server.replace(/\/?$/, '/'), ids };
+  renderList();
+}
+
+function renderList(){
+  $('list').innerHTML = current.ids.map(id => {
+    const s = suwar.find(x => x.id === id);
+    return `<div class="item" data-id="${id}">
+      <input type="checkbox" aria-label="تحديد السورة">
+      <span class="num">${id}</span>
+      <span class="name">${s ? s.name : 'سورة ' + id}</span>
+      <span class="st"></span>
+      <button class="one">تنزيل</button>
+    </div>`;
+  }).join('');
+  updateCount();
+}
+
+function updateCount(){
+  const n = document.querySelectorAll('.item input:checked').length;
+  $('count').textContent = n ? `المحدد: ${n}` : `${current ? current.ids.length : 0} سورة`;
+}
+
+// ---------- محرك التنزيل السريع ----------
+function saveBlob(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+
+async function getSize(url){
+  try{
+    const h = await fetch(url, { method: 'HEAD' });
+    const len = +h.headers.get('content-length');
+    const ranges = (h.headers.get('accept-ranges') || '').includes('bytes');
+    if(len && ranges) return len;
+  }catch(_){}
+  try{ // بديل: طلب بايت واحد وقراءة الحجم الكلي
+    const g = await fetch(url, { headers: { Range: 'bytes=0-0' } });
+    const cr = g.headers.get('content-range'); // bytes 0-0/12345
+    if(g.status === 206 && cr) return +cr.split('/')[1];
+  }catch(_){}
+  return 0;
+}
+
+// تنزيل متوازٍ: يقسّم الملف إلى أجزاء ويجلبها معًا
+async function fastFetch(url, parallel, onProgress){
+  const size = await getSize(url);
+  if(!size){ // بلا دعم للأجزاء: تنزيل مباشر بالبث
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('http ' + res.status);
+    const total = +res.headers.get('content-length') || 0;
+    const reader = res.body.getReader(); const parts = []; let got = 0;
+    for(;;){
+      const { done, value } = await reader.read();
+      if(done) break;
+      parts.push(value); got += value.length;
+      if(total) onProgress(got / total);
+    }
+    return new Blob(parts, { type: 'audio/mpeg' });
+  }
+  const CHUNK = Math.max(512 * 1024, Math.ceil(size / parallel));
+  const jobs = [];
+  for(let s = 0; s < size; s += CHUNK) jobs.push([s, Math.min(s + CHUNK - 1, size - 1)]);
+  const out = new Array(jobs.length); let got = 0, next = 0;
+
+  async function worker(){
+    while(next < jobs.length){
+      const i = next++; const [a, b] = jobs[i];
+      for(let tries = 0; ; tries++){
+        try{
+          const r = await fetch(url, { headers: { Range: `bytes=${a}-${b}` } });
+          if(r.status !== 206 && r.status !== 200) throw new Error('http ' + r.status);
+          const buf = await r.arrayBuffer();
+          out[i] = buf; got += buf.byteLength; onProgress(got / size);
+          break;
+        }catch(e){ if(tries >= 2) throw e; }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(parallel, jobs.length) }, worker));
+  return new Blob(out, { type: 'audio/mpeg' });
+}
+
+async function downloadOne(id, row){
+  const st = row.querySelector('.st');
+  const s = suwar.find(x => x.id === id);
+  const fileName = `${current.reciter} - ${pad(id)} ${s ? s.name : ''}.mp3`;
+  const url = current.server + pad(id) + '.mp3';
+  const t0 = performance.now();
+  st.className = 'st'; st.textContent = '0%';
+  try{
+    const blob = await fastFetch(url, +$('speed').value, p => st.textContent = Math.round(p * 100) + '%');
+    saveBlob(blob, fileName);
+    const sec = (performance.now() - t0) / 1000;
+    st.textContent = `تم (${(blob.size / 1048576 / sec).toFixed(1)} م.ب/ث)`;
+    return true;
+  }catch(e){
+    // الخطة البديلة: الرابط المباشر
+    st.className = 'st err'; st.textContent = 'رابط مباشر';
+    window.open(url, '_blank', 'noopener');
+    return false;
+  }
+}
+
+async function downloadMany(rows){
+  $('dl').disabled = true;
+  let done = 0;
+  $('total').style.width = '0';
+  // ملف واحد في كل مرة؛ التوازي يحدث داخل الملف نفسه
+  for(const row of rows){
+    await downloadOne(+row.dataset.id, row);
+    $('total').style.width = (++done / rows.length * 100) + '%';
+  }
+  $('dl').disabled = false;
+}
+
+// ---------- الأحداث ----------
+$('q').addEventListener('input', e => fillReciters(e.target.value));
+$('reciter').addEventListener('change', onReciter);
+$('moshaf').addEventListener('change', onMoshaf);
+$('all').onclick = () => { document.querySelectorAll('.item input').forEach(c => c.checked = true); updateCount(); };
+$('none').onclick = () => { document.querySelectorAll('.item input').forEach(c => c.checked = false); updateCount(); };
+$('list').addEventListener('change', updateCount);
+$('list').addEventListener('click', e => {
+  if(e.target.classList.contains('one')){
+    const row = e.target.closest('.item');
+    e.target.disabled = true;
+    downloadOne(+row.dataset.id, row).then(() => e.target.disabled = false);
+  }
+});
+$('dl').onclick = () => {
+  const rows = [...document.querySelectorAll('.item')].filter(r => r.querySelector('input').checked);
+  if(!rows.length){ alert('حدّد سورة واحدة على الأقل.'); return; }
+  downloadMany(rows);
+};
+
+init();
+</script>
+</body>
+</html>
