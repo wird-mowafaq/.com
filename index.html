@@ -277,8 +277,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
    <button id="alogin" class="btn">دخول</button>
   </div>
   <div id="admmain" hidden>
-   <div id="acount" hidden style="display:none;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
-   <button id="astatsbtn" class="btn" hidden style="margin-bottom:12px">📈 فتح صفحة الإحصاءات</button>
+   <div id="acount" hidden style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px"></div>
    <div id="abgbox" hidden>
     <h3>🎬 مجلد الخلفيات (للمالك والأدمن فقط)</h3>
     <div id="alistbox" hidden><h3>🗂 قوائم الخلفيات</h3><div id="alists"></div><input id="lname" placeholder="اسم قائمة جديدة (مثل: طبيعة، ليل…)"><button id="ladd" class="btn">➕ إنشاء قائمة</button></div>
@@ -713,7 +712,7 @@ try{sess=JSON.parse(localStorage.getItem('sbs')||'null')}catch(e){}
 const astat=(m,err)=>{$('astat').textContent=m||'';$('astat').className=err?'err':''};
 const jh=(extra={})=>({apikey:SB.key,Authorization:'Bearer '+(sess?sess.access_token:SB.key),'Content-Type':'application/json',...extra});
 function saveSess(j,email){sess={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+((j.expires_in||3600)-60)*1000,email:((j.user&&j.user.email)||email||(sess&&sess.email)||'').toLowerCase()};localStorage.setItem('sbs',JSON.stringify(sess))}
-function dropSess(){sess=null;role=null;localStorage.removeItem('sbs');localStorage.removeItem('role')}
+function dropSess(){sess=null;role=null;localStorage.removeItem('sbs')}
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const mail=async c=>'u'+(await sha(c)).slice(0,24)+'@staff.nur';
 async function signIn(code){
@@ -748,13 +747,25 @@ async function api(path,opt={}){
 let BG=[],LISTS=[],curL=localStorage.getItem('bglist')||'all';
 /* القوائم والروابط تُحفظ كملفات JSON داخل مخزن الخلفيات نفسه، فلا حاجة لأي جداول جديدة */
 const PUB=SB_URL+'/storage/v1/object/public/backgrounds/';
-async function readJson(name,def){try{const r=await fetch(PUB+name+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return def;const j=await r.json();return j&&typeof j==='object'?j:def}catch(e){return def}}
+const isMeta=x=>String((x&&x.name)||'').startsWith('@@meta:');
+async function readJson(name,def){
+ try{const r=await fetch(SB_URL+'/rest/v1/backgrounds?select=url&order=id.desc&limit=1&name=eq.'+encodeURIComponent('@@meta:'+name),{headers:{apikey:SB.key},cache:'no-store'});
+  if(r.ok){const a=await r.json();if(a.length){const j=JSON.parse(a[0].url);if(j&&typeof j==='object')return j}}}catch(e){}
+ try{const r=await fetch(PUB+name+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return def;const j=await r.json();return j&&typeof j==='object'?j:def}catch(e){return def}}
 const POLICY_SQL=`drop policy if exists "owner manage backgrounds storage" on storage.objects;
 create policy "owner manage backgrounds storage" on storage.objects for all to authenticated
 using (bucket_id='backgrounds' and exists (select 1 from public.staff s where s.email=(auth.jwt()->>'email') and s.role='owner'))
 with check (bucket_id='backgrounds' and exists (select 1 from public.staff s where s.email=(auth.jwt()->>'email') and s.role='owner'));`;
 async function writeJson(name,obj){
  if(!await fresh())throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
+ /* الحفظ كصف في جدول backgrounds (نفس صلاحيات رفع الخلفيات التي تعمل أصلًا): إضافة صف جديد ثم حذف الأقدم، دون لمس صلاحيات التخزين */
+ const mn='@@meta:'+name;
+ try{
+  const r=await api('/rest/v1/backgrounds',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({name:mn,path:name,url:JSON.stringify(obj)})});
+  const id=Array.isArray(r)&&r[0]&&r[0].id;
+  if(id)api('/rest/v1/backgrounds?name=eq.'+encodeURIComponent(mn)+'&id=lt.'+id,{method:'DELETE',headers:{Prefer:'return=minimal'}}).catch(()=>{});
+  return;
+ }catch(dbErr){console.warn('db save failed',dbErr)}
  const u=SB_URL+'/storage/v1/object/backgrounds/'+name,body=JSON.stringify(obj);
  const h={apikey:SB.key,Authorization:'Bearer '+sess.access_token,'Content-Type':'application/json','cache-control':'max-age=0'};
  /* كتابة مباشرة فوق الملف (upsert) بدل حذفه ثم رفعه: الحذف كان يفشل صامتًا فيرفض الرفع بخطأ 400 «الملف موجود» */
@@ -785,7 +796,7 @@ async function loadBackgrounds(){
  if(SB_ON){
   try{const [r,j]=await Promise.all([fetch(SB_URL+'/rest/v1/backgrounds?select=url,name&order=id',{headers:{apikey:SB.key}}),readJson('meta/lists.json',{lists:[]})]);
    LISTS=(Array.isArray(j.lists)?j.lists:[]).filter(l=>l&&l.id&&l.name);
-   if(r.ok)list=(await r.json()).map(x=>{const p=parseBg(x);return{u:x.url,n:p.n,l:LISTS.some(z=>z.id===p.id)?p.id:null}})}catch(e){}
+   if(r.ok)list=(await r.json()).filter(x=>!isMeta(x)).map(x=>{const p=parseBg(x);return{u:x.url,n:p.n,l:LISTS.some(z=>z.id===p.id)?p.id:null}})}catch(e){}
  }
  if(!list.length)list=(await probe()).map(u=>({u,n:u,l:null}));
  BG=list;if(curL!=='all'&&!LISTS.some(x=>String(x.id)===String(curL)))curL='all';
@@ -811,12 +822,10 @@ async function saveLists(){await writeJson('meta/lists.json',{v:1,lists:LISTS})}
 async function renderPanel(){
  $('admlogin').hidden=true;$('admmain').hidden=false;
  $('admtitle').textContent=isOwner()?'👑 لوحة المالك':'🛠 لوحة الأدمن';
- $('abgbox').hidden=!(isOwner()||can('up')||can('del'));$('astaffbox').hidden=!isOwner();$('achbox').hidden=!isOwner();$('nstats').hidden=!can('stats');$('astatsbtn').hidden=!can('stats');
- try{localStorage.setItem('role',role||'')}catch(e){}
+ $('abgbox').hidden=!(isOwner()||can('up')||can('del'));$('astaffbox').hidden=!isOwner();$('achbox').hidden=!isOwner();$('nstats').hidden=!can('stats');
  await loadBackgrounds();await renderLists();fillUpSel();await renderBgs();
- if(isOwner()){await renderStaff();renderCount()}else{$('acount').hidden=true;$('acount').style.display='none'}
+ if(isOwner()){await renderStaff();renderCount()}else $('acount').hidden=true;
 }
-$('astatsbtn').onclick=()=>{$('adm').hidden=true;nav('x')};
 function fillUpSel(){
  const e=$('aupl');e.innerHTML='';
  const ok=allowedLists();
@@ -873,7 +882,7 @@ async function delBg(x){
 }
 async function delMany(items){let bad=0,i=0;for(const x of items){i++;astat('جارٍ الحذف '+ar(i)+' / '+ar(items.length)+'…');if(!await delBg(x))bad++}return bad}
 async function delFolder(l){
- let L=[];try{L=await api('/rest/v1/backgrounds?select=id,name,path,url&order=id')}catch(e){return astat(e.message,1)}
+ let L=[];try{L=(await api('/rest/v1/backgrounds?select=id,name,path,url&order=id')).filter(x=>!isMeta(x))}catch(e){return astat(e.message,1)}
  const mine=L.filter(x=>parseBg(x).id===l.id);
  if(!confirm('سيُحذف المجلد «'+l.name+'» مع '+ar(mine.length)+' خلفية بداخله نهائيًا. هل أنت متأكد؟'))return;
  try{
@@ -883,58 +892,32 @@ async function delFolder(l){
  }catch(e){astat(e.message,1)}
  await renderPanel();
 }
-const SELBG=new Set();
 async function renderBgs(){
- const box=$('abg');box.innerHTML='';let L=[];SELBG.clear();
- try{L=(await api('/rest/v1/backgrounds?select=id,name,path,url&order=id')).map(x=>{const q=parseBg(x);return{...x,n:q.n,l:LISTS.some(z=>z.id===q.id)?q.id:null}})}catch(e){astat(e.message,1)}
+ const box=$('abg');box.innerHTML='';let L=[];
+ try{L=(await api('/rest/v1/backgrounds?select=id,name,path,url&order=id')).filter(x=>!isMeta(x)).map(x=>{const q=parseBg(x);return{...x,n:q.n,l:LISTS.some(z=>z.id===q.id)?q.id:null}})}catch(e){astat(e.message,1)}
  if(!L.length)box.innerHTML='<p class="ld" style="padding:10px">لا توجد خلفيات مرفوعة بعد.</p>';
- const byId=new Map(L.map(x=>[x.id,x])),cbs=[],canDel=can('del');
- /* شريط التحديد والحذف: يبقى ظاهرًا أعلى القائمة أثناء التمرير */
- let dBtn=null;
- const upd=()=>{cbs.forEach(c=>{c.checked=SELBG.has(c.dataset.id)});if(dBtn){const n=SELBG.size;dBtn.textContent='🗑 حذف المحدد ('+ar(n)+')';dBtn.disabled=!n;dBtn.style.opacity=n?1:.45}};
- const toggle=(ids,on)=>{ids.forEach(id=>on?SELBG.add(String(id)):SELBG.delete(String(id)));upd()};
- if(canDel&&L.length){
-  const bar=document.createElement('div');bar.style.cssText='position:sticky;top:0;z-index:3;background:var(--card);padding:8px 0;margin-bottom:6px;border-bottom:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap;align-items:center';
-  const all=mkbtn('☑ تحديد الكل',0,()=>toggle(L.map(x=>x.id),SELBG.size!==L.length));
-  const none=mkbtn('إلغاء التحديد',0,()=>toggle(L.map(x=>x.id),false));
-  dBtn=mkbtn('',1,async()=>{
-   const items=[...SELBG].map(id=>byId.get(isNaN(id)?id:+id)||byId.get(id)).filter(Boolean);
-   if(!items.length)return;
-   if(!confirm('حذف '+ar(items.length)+' خلفية نهائيًا؟ لا يمكن التراجع.'))return;
-   try{const bad=await delMany(items);astat(bad?'حُذفت الخلفيات، لكن تعذّر حذف '+ar(bad)+' ملف من التخزين':'تم حذف '+ar(items.length)+' خلفية ✓',!!bad)}catch(e){astat(e.message,1)}
-   await loadBackgrounds();renderBgs()});
-  bar.append(all,none,dBtn);box.append(bar);
- }
  const groups=LISTS.map(l=>({id:l.id,name:l.name})).concat([{id:null,name:'بلا قائمة'}]);
  groups.forEach(g=>{
   const items=L.filter(x=>x.l===g.id);
   if(!items.length&&(g.id===null||(!isOwner()&&!allowedLists().some(z=>z.id===g.id))))return;
-  const h=document.createElement('h3');h.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap';
+  const h=document.createElement('h3');h.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px';
   const ht=document.createElement('span');ht.textContent='🗂 '+g.name+' ('+ar(items.length)+')';h.append(ht);
-  if(canDel&&items.length){
-   h.append(mkbtn('تحديد المجموعة',0,()=>toggle(items.map(x=>x.id),!items.every(x=>SELBG.has(String(x.id))))));
-   h.append(mkbtn('حذف الكل',1,async()=>{
-    if(!confirm('حذف جميع الخلفيات ('+ar(items.length)+') في «'+g.name+'» نهائيًا؟'))return;
-    try{const bad=await delMany(items);astat(bad?'حُذفت الخلفيات، لكن تعذّر حذف '+ar(bad)+' ملف من التخزين':'تم الحذف ✓',!!bad)}catch(e){astat(e.message,1)}
-    await loadBackgrounds();renderBgs()}));
-  }
+  if(can('del')&&items.length)h.append(mkbtn('حذف الكل',1,async()=>{
+   if(!confirm('حذف جميع الخلفيات ('+ar(items.length)+') في «'+g.name+'» نهائيًا؟'))return;
+   try{const bad=await delMany(items);astat(bad?'حُذفت الخلفيات، لكن تعذّر حذف '+ar(bad)+' ملف من التخزين':'تم الحذف ✓',!!bad)}catch(e){astat(e.message,1)}
+   await loadBackgrounds();renderBgs()}));
   box.append(h);
   items.forEach(x=>{
    const row=document.createElement('div');row.className='arow';
-   if(canDel){const c=document.createElement('input');c.type='checkbox';c.dataset.id=String(x.id);c.style.cssText='width:22px;height:22px;min-width:0;margin:0;flex:0 0 auto;cursor:pointer';
-    c.onchange=()=>toggle([x.id],c.checked);cbs.push(c);row.append(c)}
    const v=document.createElement('video');v.src=x.url;v.muted=true;v.preload='metadata';
-   const t=document.createElement('div');t.className='t';t.textContent=dn(x.n);
-   if(canDel){v.style.cursor=t.style.cursor='pointer';const tg=()=>toggle([x.id],!SELBG.has(String(x.id)));v.onclick=tg;t.onclick=tg}
-   row.append(v,t);
+   const t=document.createElement('div');t.className='t';t.textContent=dn(x.n);row.append(v,t);
    if(isOwner()&&LISTS.length){const m=document.createElement('select');m.style.cssText='width:auto;max-width:110px;margin:0';m.add(new Option('نقل إلى…',''));LISTS.forEach(l=>{if(l.id!==g.id)m.add(new Option(l.name,l.id))});if(g.id!==null)m.add(new Option('بلا قائمة','none'));
     m.onchange=async()=>{if(!m.value)return;try{await moveBg(x,m.value==='none'?null:m.value);await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}};row.append(m)}
-   if(canDel)row.append(mkbtn('🗑',1,async()=>{if(!confirm('حذف هذه الخلفية؟'))return;
+   if(can('del'))row.append(mkbtn('حذف',1,async()=>{if(!confirm('حذف هذه الخلفية؟'))return;
     try{const ok=await delBg(x);astat(ok?'تم حذف الخلفية ✓':'حُذفت الخلفية، لكن تعذّر حذف الملف من التخزين',!ok);await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}}));
    box.append(row);
   });
  });
- upd();
 }
 $('abtnup').onclick=async()=>{
  const f=$('aup').files[0];if(!f)return astat('اختر فيديو أولًا',1);
@@ -1549,12 +1532,8 @@ async function renderSide(local){
  box.innerHTML='';if(!LINKS.length)box.innerHTML='<p class="ld">لم تُضَف حسابات بعد.</p>';
  LINKS.forEach((x,i)=>{const row=document.createElement('div');row.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:8px';
   const a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener noreferrer';a.className='btn';a.style.cssText='flex:1;text-align:start;text-decoration:none;display:block;margin:0';a.textContent=ICON(x.url)+' '+x.title;row.append(a);
-  if(isOwner())row.append(mkbtn('🗑 حذف',1,async()=>{
-   if(!isOwner())return banner('الحذف للمالك فقط');
-   if(!confirm('حذف حساب «'+x.title+'» نهائيًا؟'))return;
-   try{const k=LINKS.indexOf(x);if(k>=0)LINKS.splice(k,1);await saveLinks();renderSide(true);banner('تم حذف الحساب ✓')}catch(e){banner(e.message);renderSide()}}));
+  if(isOwner())row.append(mkbtn('✕',1,async()=>{try{LINKS.splice(i,1);await saveLinks();renderSide(true)}catch(e){banner(e.message);renderSide()}}));
   box.append(row)});
- if(!isOwner()){const b=mkbtn('🔐 دخول المالك لإدارة الحسابات',0,()=>{$('side').hidden=true;openAdm()});b.style.marginTop='10px';box.append(b)}
 }
 $('sidebtn').onclick=()=>{$('side').hidden=false;renderSide()};
 $('sidex').onclick=()=>{$('side').hidden=true};$('side').onclick=e=>{if(e.target===$('side'))$('side').hidden=true};
@@ -1771,8 +1750,7 @@ loadBackgrounds();
 
 const DEV=(()=>{let d=localStorage.getItem('dev');if(!d){d=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem('dev',d)}catch(e){}}return d})();
 
-if(sess&&localStorage.getItem('role')==='owner')$('nstats').hidden=false;   // يظهر زر الإحصاءات للمالك فورًا قبل انتهاء التحقق
-(async()=>{if(!sess||!SB_ON)return;try{const a=await api('/rest/v1/staff?select=role,name,up,del,stats&email=eq.'+encodeURIComponent(me()));if(a&&a[0]){perm=a[0];role=perm.role;try{localStorage.setItem('role',role||'')}catch(e){}$('nstats').hidden=!can('stats');$('astatsbtn').hidden=!can('stats')}}catch(e){}})();
+(async()=>{if(!sess||!SB_ON)return;try{const a=await api('/rest/v1/staff?select=role,name,up,del,stats&email=eq.'+encodeURIComponent(me()));if(a&&a[0]){perm=a[0];role=perm.role;$('nstats').hidden=!can('stats')}}catch(e){}})();
 refreshAcct();
 gateCheck();tryVisit();
 init();
