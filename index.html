@@ -46,7 +46,7 @@ main{max-width:900px;margin:auto;padding:0 20px 70px}
 #astat{min-height:1.4em;color:var(--mist);font-size:.92rem;margin:6px 0}
 #astat.err{color:#f2a0a0}
 .arow{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
-.arow video{width:64px;height:40px;object-fit:cover;border-radius:6px;background:#000;flex:0 0 auto}
+.arow video,.arow img{width:64px;height:40px;object-fit:cover;border-radius:6px;background:#000;flex:0 0 auto}
 .arow .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92rem}
 .arow .t small{display:block;color:var(--mist);direction:ltr;text-align:right}
 .arow.off{opacity:.5}
@@ -143,7 +143,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
 #bgp{position:absolute;bottom:104px;left:10px;right:10px;max-height:52%;overflow:auto;background:rgba(0,0,0,.85);border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:12px;z-index:20}#bgp[hidden]{display:none}
 #bgpg{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px}
 .bgi{background:#000;border:1px solid rgba(255,255,255,.25);border-radius:10px;overflow:hidden;color:#eee;cursor:pointer;padding:0;width:auto!important;height:auto!important;border-radius:10px!important}
-.bgi video{width:100%;height:80px;object-fit:cover;display:block}.bgi span{font-size:.75rem;display:block;padding:4px}
+.bgi video,.bgi img{width:100%;height:80px;object-fit:cover;display:block}.bgi span{font-size:.75rem;display:block;padding:4px}
 
 /* ===== إضافات: الصلاة + التنبيه ===== */
 #prayer{display:none}
@@ -288,7 +288,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
     <div id="alistbox" hidden><h3>🗂 قوائم الخلفيات</h3><div id="alists"></div><input id="lname" placeholder="اسم قائمة جديدة (مثل: طبيعة، ليل…)"><button id="ladd" class="btn">➕ إنشاء قائمة</button></div>
 <div id="abg"></div>
     <p id="aupnote" class="ld" hidden>لم يُسمح لك بالرفع في أي قائمة بعد. اطلب من المالك أن يسمح لك.</p>
-     <div id="aupbox"><select id="aupl" aria-label="رفع إلى قائمة"></select><input id="aup" type="file" accept="video/*"><div id="aupinfo" class="ld" style="padding:4px 0;font-size:.85rem"></div><div id="aprog"><i></i></div><button id="abtnup" class="btn">⬆ رفع خلفية</button></div>
+     <div id="aupbox"><select id="aupl" aria-label="رفع إلى قائمة"></select><input id="aup" type="file" accept="video/*,image/*"><div id="aupinfo" class="ld" style="padding:4px 0;font-size:.85rem"></div><div id="aprog"><i></i></div><button id="abtnup" class="btn">⬆ رفع خلفية (فيديو أو صورة)</button></div>
    </div>
    <div id="astaffbox" hidden>
     <h3>الأدمن</h3><div id="astaff"></div>
@@ -692,9 +692,18 @@ function probe(){
  }))).then(a=>a.filter(Boolean)));
 }
 const nm=()=>{const n=names[bi%names.length]||'';try{return decodeURI(n)}catch(e){return n}};
+const isImg=u=>/\.(jpe?g|png|webp|gif|avif|bmp)(\?|#|$)/i.test(String(u||''));
 function setBg(){
- if(!vids.length){bg.style.display='none';fb.style.display='block';return}
- bg.style.display='block';bg.muted=true;bg.src=vids[bi%vids.length];
+ if(!vids.length){bg.style.display='none';fb.style.background='';fb.style.animation='';fb.style.display='block';return}
+ const u=vids[bi%vids.length];
+ if(isImg(u)){   // خلفية صورة
+  try{bg.pause()}catch(e){}
+  bg.style.display='none';
+  fb.style.background='#000 url("'+u+'") center/cover no-repeat';fb.style.animation='none';fb.style.display='block';
+  return;
+ }
+ fb.style.background='';fb.style.animation='';
+ bg.style.display='block';bg.muted=true;bg.src=u;
  bg.play().catch(()=>{});
 }
 bg.onerror=()=>{
@@ -794,7 +803,7 @@ function fillListSelects(){
 }
 function fillCbv(){
  const e=$('cbv');if(!e)return;const v=$('cbl').value||'all';e.innerHTML='';e.add(new Option('🎲 خلفية عشوائية من القائمة',''));
- BG.filter(x=>v==='all'||String(x.l)===v).forEach(x=>e.add(new Option(dn(x.n),x.u)));
+ BG.filter(x=>v==='all'||String(x.l)===v).forEach(x=>e.add(new Option((isImg(x.u)?'🖼 ':'🎬 ')+dn(x.n),x.u)));
 }
 async function loadBackgrounds(){
  let list=[];LISTS=[];
@@ -810,7 +819,7 @@ async function loadBackgrounds(){
 function renderPick(){
  const g=$('bgpg');g.innerHTML='';
  const sel=BG.filter(x=>curL==='all'||String(x.l)===String(curL));
- sel.forEach(x=>{const b=document.createElement('button');b.className='bgi';const v=document.createElement('video');v.muted=true;v.preload='metadata';v.playsInline=true;v.src=x.u+'#t=0.5';
+ sel.forEach(x=>{const b=document.createElement('button');b.className='bgi';let v;if(isImg(x.u)){v=document.createElement('img');v.loading='lazy';v.src=x.u}else{v=document.createElement('video');v.muted=true;v.preload='metadata';v.playsInline=true;v.src=x.u+'#t=0.5'}
   const t=document.createElement('span');t.textContent=dn(x.n);b.append(v,t);
   b.onclick=()=>{bi=Math.max(0,vids.indexOf(x.u));tried=0;setBg();$('bgp').hidden=true};g.append(b)});
  if(!sel.length)g.textContent='لا توجد خلفيات في هذه القائمة';
@@ -914,7 +923,7 @@ async function renderBgs(){
   box.append(h);
   items.forEach(x=>{
    const row=document.createElement('div');row.className='arow';
-   const v=document.createElement('video');v.src=x.url;v.muted=true;v.preload='metadata';
+   let v;if(isImg(x.url)){v=document.createElement('img');v.loading='lazy';v.src=x.url}else{v=document.createElement('video');v.src=x.url;v.muted=true;v.preload='metadata'}
    const t=document.createElement('div');t.className='t';t.textContent=dn(x.n);row.append(v,t);
    if(isOwner()&&LISTS.length){const m=document.createElement('select');m.style.cssText='width:auto;max-width:110px;margin:0';m.add(new Option('نقل إلى…',''));LISTS.forEach(l=>{if(l.id!==g.id)m.add(new Option(l.name,l.id))});if(g.id!==null)m.add(new Option('بلا قائمة','none'));
     m.onchange=async()=>{if(!m.value)return;try{await moveBg(x,m.value==='none'?null:m.value);await loadBackgrounds();renderBgs()}catch(e){astat(e.message,1)}};row.append(m)}
@@ -925,19 +934,32 @@ async function renderBgs(){
  });
 }
 $('abtnup').onclick=async()=>{
- const f=$('aup').files[0];if(!f)return astat('اختر فيديو أولًا',1);
+ let f=$('aup').files[0];if(!f)return astat('اختر فيديو أو صورة أولًا',1);
  if(!isOwner()&&!$('aupl').value)return astat('اختر القائمة التي سترفع إليها',1);
- if(!/^video\//.test(f.type))return astat('الملف ليس فيديو',1);
+ const isI=/^image\//.test(f.type)||/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name),isV=/^video\//.test(f.type);
+ if(!isI&&!isV)return astat('الملف ليس فيديو ولا صورة',1);
  if(!await fresh())return astat('انتهت الجلسة، سجّل الدخول من جديد',1);
- const path=Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+((f.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'')||'mp4');
+ let upBlob=f,upType=f.type||(isI?'image/jpeg':'video/mp4'),upExt=((f.name.split('.').pop()||(isI?'jpg':'mp4')).toLowerCase().replace(/[^a-z0-9]/g,'')||(isI?'jpg':'mp4'));
+ if(isI&&!/gif$/i.test(upExt)&&!/gif/.test(upType)){   // تصغير الصور الكبيرة (حتى ١٩٢٠ بكسل) لتوفير المساحة
+  astat('جارٍ تجهيز الصورة…');
+  try{
+   const u=URL.createObjectURL(f),im=new Image();im.src=u;await im.decode();
+   const sc=Math.min(1,1920/Math.max(im.naturalWidth,im.naturalHeight)),cv=document.createElement('canvas');
+   cv.width=Math.round(im.naturalWidth*sc);cv.height=Math.round(im.naturalHeight*sc);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);URL.revokeObjectURL(u);
+   const sb=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.88));
+   if(sb&&sb.size<f.size){upBlob=sb;upType='image/jpeg';upExt='jpg'}
+  }catch(e){}
+ }
+ if(!/^(image|video)\//.test(upType))upType=isI?'image/jpeg':'video/mp4';
+ const path=Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+upExt;
  const pg=$('aprog'),bar=pg.firstElementChild;pg.style.display='block';astat('جارٍ الرفع…');
  try{
   await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',SB_URL+'/storage/v1/object/backgrounds/'+path);
-   x.setRequestHeader('apikey',SB.key);x.setRequestHeader('Authorization','Bearer '+sess.access_token);x.setRequestHeader('Content-Type',f.type);
+   x.setRequestHeader('apikey',SB.key);x.setRequestHeader('Authorization','Bearer '+sess.access_token);x.setRequestHeader('Content-Type',upType);
    x.upload.onprogress=e=>{if(e.lengthComputable)bar.style.width=(e.loaded/e.total*100)+'%'};
-   x.onload=()=>x.status<300?ok():no(new Error(x.status===400||x.status===403?'ليست لديك صلاحية الرفع':'فشل الرفع ('+x.status+')'));x.onerror=()=>no(new Error('فشل الاتصال'));x.send(f)});
+   x.onload=()=>x.status<300?ok():no(new Error(x.status===415||/mime|type/i.test(x.responseText||'')?'مخزن Supabase لا يقبل هذا النوع: افتح Storage ← backgrounds ← Edit bucket، وفي Allowed MIME types اتركه فارغًا أو أضف image/*':x.status===400||x.status===403?'ليست لديك صلاحية الرفع':'فشل الرفع ('+x.status+')'));x.onerror=()=>no(new Error('فشل الاتصال'));x.send(upBlob)});
   await api('/rest/v1/backgrounds',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name:($('aupl').value?'@@'+$('aupl').value+'@@':'')+f.name,path,url:SB_URL+'/storage/v1/object/public/backgrounds/'+path})});
-  $('aup').value='';astat('تم رفع الخلفية ✓');await loadBackgrounds();renderBgs();
+  $('aup').value='';$('aupinfo').textContent='';astat('تم رفع الخلفية ✓');await loadBackgrounds();renderBgs();
  }catch(e){astat(e.message,1)}
  pg.style.display='none';bar.style.width='0';
 };
@@ -1644,6 +1666,11 @@ async function cInfo(){
 ['crec','csur','cfrom','cto','csz','cq'].forEach(i=>$(i).addEventListener('change',cInfo));['cfrom','cto'].forEach(i=>$(i).addEventListener('input',cInfo));
 $('aup').addEventListener('change',()=>{
  const f=$('aup').files[0],o=$('aupinfo');o.textContent='';o.style.color='var(--mist)';if(!f)return;
+ if(/^image\//.test(f.type)||/\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name)){
+  const mb=f.size/1048576,u=URL.createObjectURL(f),im=new Image();
+  im.onload=()=>{o.textContent='🖼 صورة — '+(mb<1?ar(Math.round(f.size/1024))+' كيلوبايت':ar(mb.toFixed(1))+' ميغابايت')+' · الدقة '+ar(im.naturalWidth)+'×'+ar(im.naturalHeight)+' — تُصغَّر تلقائيًا إلى ١٩٢٠ بكسل عند الرفع ✓';URL.revokeObjectURL(u)};
+  im.onerror=()=>{o.textContent='تعذّر قراءة الصورة';o.style.color='#f2a0a0';URL.revokeObjectURL(u)};im.src=u;return;
+ }
  const mb=f.size/1048576,m='📦 الحجم: '+(mb<1?ar(Math.round(f.size/1024))+' كيلوبايت':ar(mb.toFixed(1))+' ميغابايت'),v=document.createElement('video'),u=URL.createObjectURL(f);v.preload='metadata';v.muted=true;
  const show=x=>{o.textContent=m+(x||'')+(mb>50?' — ⚠ أكبر من ٥٠ ميغابايت وقد يُرفض في الباقة المجانية':mb>15?' — ⚠ كبير على الجوال، الأفضل ضغطه إلى ٥–١٠ ميغابايت':' ✓');if(mb>15)o.style.color='#f2a0a0'};
  v.onloadedmetadata=()=>{show(' · الدقة '+ar(v.videoWidth)+'×'+ar(v.videoHeight)+' · المدة '+ar(Math.round(v.duration))+' ث');URL.revokeObjectURL(u)};
@@ -1703,6 +1730,7 @@ $('cdlv').onclick=async()=>{
   try{AC=new (window.AudioContext||window.webkitAudioContext)({sampleRate:48000})}catch(e){AC=new (window.AudioContext||window.webkitAudioContext)()}
   let url=$('cbv').value;
   if(!url){const pool=BG.filter(x=>($('cbl').value==='all')||String(x.l)===$('cbl').value);if(pool.length)url=pool[Math.floor(Math.random()*pool.length)].u}
+  const imgBg=!!url&&isImg(url);let bgImg=null;
   const bgP=url?fetch(url).then(r=>r.ok?r.blob():null).catch(()=>null):null;   // تحميل الخلفية يبدأ مع تحميل الصوت لا بعده
   const bufs=new Array(its.length);let got=0,aerr=null;const nx={v:0};
   await Promise.all(Array.from({length:Math.min(4,its.length)},async()=>{   // ٤ آيات في وقت واحد
@@ -1714,12 +1742,14 @@ $('cdlv').onclick=async()=>{
    }
   }));
   if(vcancel)throw new Error('cancel');if(aerr)throw new Error('audio');
+  if(imgBg&&bgP){try{const bb=await bgP;if(bb){bgUrl=URL.createObjectURL(bb);const im=new Image();im.src=bgUrl;await im.decode();if(im.naturalWidth)bgImg=im}}catch(e){}}
   const Z=vsize(),W=Z.W,H=Z.H,K=Math.min(W,H)/720,cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
   const layouts=its.map(it=>fitText(x,it.text+' ﴿'+ar(it.numberInSurah)+'﴾',W-110*K,H*0.58,vfont,K));
   const starts=[];let acc=0.7;bufs.forEach(b=>{starts.push(acc);acc+=b.duration+0.4});const total=acc;
   const title=c.s.name+' — '+c.r.name,mark='وِرد د. موفّق رحمه الله';
   function frame(t){
-   if(v&&v.readyState>=2&&v.videoWidth){const sc=Math.max(W/v.videoWidth,H/v.videoHeight),w=v.videoWidth*sc,h=v.videoHeight*sc;x.drawImage(v,(W-w)/2,(H-h)/2,w,h)}
+   if(bgImg){const sc=Math.max(W/bgImg.naturalWidth,H/bgImg.naturalHeight),w=bgImg.naturalWidth*sc,h=bgImg.naturalHeight*sc;x.drawImage(bgImg,(W-w)/2,(H-h)/2,w,h)}
+   else if(v&&v.readyState>=2&&v.videoWidth){const sc=Math.max(W/v.videoWidth,H/v.videoHeight),w=v.videoWidth*sc,h=v.videoHeight*sc;x.drawImage(v,(W-w)/2,(H-h)/2,w,h)}
    else{const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0e2623');g.addColorStop(1,'#1b4a42');x.fillStyle=g;x.fillRect(0,0,W,H)}
    x.fillStyle='rgba(0,0,0,.5)';x.fillRect(0,0,W,H);
    x.textAlign='center';x.textBaseline='middle';x.direction='rtl';
@@ -1738,7 +1768,7 @@ $('cdlv').onclick=async()=>{
    if(!(await AudioEncoder.isConfigSupported(ac)).supported){ac={codec:'opus',sampleRate:SR,numberOfChannels:2,bitrate:96000};acodec='opus';if(!(await AudioEncoder.isConfigSupported(ac)).supported)throw new Error('noaudio')}
    const total_=Math.ceil((total+0.3)*SR),mix=[new Float32Array(total_),new Float32Array(total_)];
    bufs.forEach((b,i)=>{const off=Math.round(starts[i]*SR);for(let ch=0;ch<2;ch++){const src=b.getChannelData(Math.min(ch,b.numberOfChannels-1)),dst=mix[ch],m=Math.min(src.length,total_-off);for(let k=0;k<m;k++)dst[off+k]+=src[k]}});
-   if(bgP){try{const bb=await bgP;if(bb){const e=document.createElement('video');e.muted=true;e.playsInline=true;e.preload='auto';bgUrl=URL.createObjectURL(bb);e.src=bgUrl;if(await waitLoad(e,15000))v=e}}catch(e){}}
+   if(bgP&&!imgBg){try{const bb=await bgP;if(bb){const e=document.createElement('video');e.muted=true;e.playsInline=true;e.preload='auto';bgUrl=URL.createObjectURL(bb);e.src=bgUrl;if(await waitLoad(e,15000))v=e}}catch(e){}}
    const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:'avc',width:W,height:H},audio:{codec:acodec,numberOfChannels:2,sampleRate:SR},fastStart:'in-memory',firstTimestampBehavior:'offset'});
    let err=null;
    const ve=new VideoEncoder({output:(ch,m)=>muxer.addVideoChunk(ch,m),error:e=>{err=e}});ve.configure(vc);
@@ -1773,7 +1803,7 @@ $('cdlv').onclick=async()=>{
   }
   /* المسار الاحتياطي: تسجيل بالزمن الحقيقي */
   if(!blob){
-   if(url){
+   if(url&&!imgBg){
     v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.crossOrigin='anonymous';v.src=url;
     if(!await waitLoad(v,10000))v=null;
     if(v)await v.play().catch(()=>{v=null});
