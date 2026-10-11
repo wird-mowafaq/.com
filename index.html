@@ -288,7 +288,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
     <div id="alistbox" hidden><h3>🗂 قوائم الخلفيات</h3><div id="alists"></div><input id="lname" placeholder="اسم قائمة جديدة (مثل: طبيعة، ليل…)"><button id="ladd" class="btn">➕ إنشاء قائمة</button></div>
 <div id="abg"></div>
     <p id="aupnote" class="ld" hidden>لم يُسمح لك بالرفع في أي قائمة بعد. اطلب من المالك أن يسمح لك.</p>
-     <div id="aupbox"><select id="aupl" aria-label="رفع إلى قائمة"></select><input id="aup" type="file" accept="video/*,image/jpeg,image/png,image/webp,image/gif,image/avif"><div id="aupinfo" class="ld" style="padding:4px 0;font-size:.85rem"></div><div id="aprog"><i></i></div><button id="abtnup" class="btn">⬆ رفع خلفية (صورة أو فيديو)</button></div>
+     <div id="aupbox"><select id="aupl" aria-label="رفع إلى قائمة"></select><input id="aup" type="file" multiple accept="video/*,image/*,.jfif"><div id="aupinfo" class="ld" style="padding:4px 0;font-size:.85rem"></div><div id="aprog"><i></i></div><button id="abtnup" class="btn">⬆ رفع الخلفيات (صور وفيديوهات — بلا حد)</button></div>
    </div>
    <div id="astaffbox" hidden>
     <h3>الأدمن</h3><div id="astaff"></div>
@@ -682,7 +682,7 @@ document.addEventListener('keydown',e=>{
 /* الفيديو: يجرّب كل فيديو، ويخبرك بسبب الفشل */
 let vids=[], names=[], bi=0, tried=0, tt;
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',6000)}
-const isImg=u=>/\.(jpe?g|png|webp|gif|avif|bmp)(\?|#|$)/i.test(String(u||''));
+const isImg=u=>/\.(jpe?g|jfif|pjpeg|png|webp|gif|avif|bmp)(\?|#|$)/i.test(String(u||''));
 let probed=null;
 function probe(){
  return probed||(probed=Promise.all(VIDEOS.map(u=>new Promise(res=>{
@@ -946,24 +946,39 @@ async function renderBgs(){
   });
  });
 }
+const MIME={jpg:'image/jpeg',jpeg:'image/jpeg',jfif:'image/jpeg',pjpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif',avif:'image/avif',mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',m4v:'video/mp4',mkv:'video/x-matroska'};
+function fileKind(f){
+ const ex=(f.name.split('.').pop()||'').toLowerCase();let t=f.type||'';
+ if(t==='image/pjpeg')t='image/jpeg';
+ if((!t||t==='application/octet-stream')&&MIME[ex])t=MIME[ex];
+ if(t.startsWith('video/')||t.startsWith('image/'))return {t,ex,img:t.startsWith('image/')};
+ return null;
+}
 $('abtnup').onclick=async()=>{
- const f=$('aup').files[0];if(!f)return astat('اختر صورة أو فيديو أولًا',1);
+ const files=[...$('aup').files];if(!files.length)return astat('اختر صورة أو فيديو أولًا',1);
  if(!isOwner()&&!$('aupl').value)return astat('اختر القائمة التي سترفع إليها',1);
- const isI=/^image\//.test(f.type);
- if(!/^video\//.test(f.type)&&!isI)return astat('الملف ليس صورة ولا فيديو',1);
- if(isI&&!/^image\/(jpeg|png|webp|gif|avif)$/.test(f.type))return astat('صيغة الصورة غير مدعومة، استخدم JPG أو PNG أو WebP',1);
  if(!await fresh())return astat('انتهت الجلسة، سجّل الدخول من جديد',1);
- const path=Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+((f.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'')||'mp4');
- const pg=$('aprog'),bar=pg.firstElementChild;pg.style.display='block';astat('جارٍ الرفع…');
- try{
-  await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',SB_URL+'/storage/v1/object/backgrounds/'+path);
-   x.setRequestHeader('apikey',SB.key);x.setRequestHeader('Authorization','Bearer '+sess.access_token);x.setRequestHeader('Content-Type',f.type);
-   x.upload.onprogress=e=>{if(e.lengthComputable)bar.style.width=(e.loaded/e.total*100)+'%'};
-   x.onload=()=>x.status<300?ok():no(new Error(x.status===415||(x.status===400&&isI)?'المخزن لا يقبل هذا النوع من الملفات (فعّل أنواع الصور في إعدادات bucket الخلفيات في Supabase)':x.status===400||x.status===403?'ليست لديك صلاحية الرفع':'فشل الرفع ('+x.status+')'));x.onerror=()=>no(new Error('فشل الاتصال'));x.send(f)});
-  await api('/rest/v1/backgrounds',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name:($('aupl').value?'@@'+$('aupl').value+'@@':'')+f.name,path,url:SB_URL+'/storage/v1/object/public/backgrounds/'+path})});
-  $('aup').value='';$('aupinfo').textContent='';astat('تم رفع الخلفية ✓');await loadBackgrounds();renderBgs();
- }catch(e){astat(e.message,1)}
- pg.style.display='none';bar.style.width='0';
+ const pg=$('aprog'),bar=pg.firstElementChild,btn=$('abtnup');btn.disabled=true;pg.style.display='block';
+ let okN=0;const bad=[];
+ for(let k=0;k<files.length;k++){
+  const f=files[k],kd=fileKind(f),tag='('+ar(k+1)+'/'+ar(files.length)+') '+f.name+' — ';
+  if(!kd){bad.push(f.name+': ليس صورة ولا فيديو');continue}
+  bar.style.width='0';astat(tag+'جارٍ الرفع…');
+  const path=Date.now()+'-'+Math.random().toString(36).slice(2,7)+'.'+((kd.ex||'mp4').replace(/[^a-z0-9]/g,'')||(kd.img?'jpg':'mp4'));
+  try{
+   if(!await fresh())throw new Error('انتهت الجلسة، سجّل الدخول من جديد');
+   await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST',SB_URL+'/storage/v1/object/backgrounds/'+path);
+    x.setRequestHeader('apikey',SB.key);x.setRequestHeader('Authorization','Bearer '+sess.access_token);x.setRequestHeader('Content-Type',kd.t);
+    x.upload.onprogress=e=>{if(e.lengthComputable)bar.style.width=(e.loaded/e.total*100)+'%'};
+    x.onload=()=>x.status<300?ok():no(new Error(x.status===415||(x.status===400&&kd.img)?'المخزن لا يقبل هذا النوع (فعّل أنواع الصور في إعدادات bucket الخلفيات في Supabase)':x.status===400||x.status===403?'ليست لديك صلاحية الرفع':'فشل الرفع ('+x.status+')'));x.onerror=()=>no(new Error('فشل الاتصال'));x.send(new Blob([f],{type:kd.t}))});
+   await api('/rest/v1/backgrounds',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({name:($('aupl').value?'@@'+$('aupl').value+'@@':'')+f.name,path,url:SB_URL+'/storage/v1/object/public/backgrounds/'+path})});
+   okN++;
+  }catch(e){bad.push(f.name+': '+e.message)}
+ }
+ $('aup').value='';$('aupinfo').textContent='';
+ astat((okN?'تم رفع '+ar(okN)+' من '+ar(files.length)+' ✓':'')+(bad.length?(okN?' — ':'')+'تعذّر: '+bad.join(' | '):''),!okN||!!bad.length);
+ btn.disabled=false;pg.style.display='none';bar.style.width='0';
+ if(okN){await loadBackgrounds();renderBgs()}
 };
 async function renderStaff(){
  const box=$('astaff');box.innerHTML='';let L=[];
@@ -1683,7 +1698,8 @@ async function cInfo(){
 }
 ['crec','csur','cfrom','cto','csz','cq'].forEach(i=>$(i).addEventListener('change',cInfo));['cfrom','cto'].forEach(i=>$(i).addEventListener('input',cInfo));
 $('aup').addEventListener('change',()=>{
- const f=$('aup').files[0],o=$('aupinfo');o.textContent='';o.style.color='var(--mist)';if(!f)return;
+ const fl=[...$('aup').files],f=fl[0],o=$('aupinfo');o.textContent='';o.style.color='var(--mist)';if(!f)return;
+ if(fl.length>1){const tot=fl.reduce((p,q)=>p+q.size,0)/1048576;o.textContent='📦 '+ar(fl.length)+' ملفات · الحجم الكلي '+ar(tot.toFixed(1))+' ميغابايت — ستُرفع تباعًا';return}
  if(/^image\//.test(f.type)){const mb=f.size/1048576,u=URL.createObjectURL(f),im=new Image();const m='📦 الحجم: '+(mb<1?ar(Math.round(f.size/1024))+' كيلوبايت':ar(mb.toFixed(1))+' ميغابايت');im.onload=()=>{o.textContent=m+' · الدقة '+ar(im.naturalWidth)+'×'+ar(im.naturalHeight)+(mb>8?' — ⚠ كبيرة، الأفضل ضغطها إلى أقل من ٣ ميغابايت':' ✓');if(mb>8)o.style.color='#f2a0a0';URL.revokeObjectURL(u)};im.onerror=()=>{o.textContent='تعذّر قراءة الصورة';URL.revokeObjectURL(u)};im.src=u;return}
  const mb=f.size/1048576,m='📦 الحجم: '+(mb<1?ar(Math.round(f.size/1024))+' كيلوبايت':ar(mb.toFixed(1))+' ميغابايت'),v=document.createElement('video'),u=URL.createObjectURL(f);v.preload='metadata';v.muted=true;
  const show=x=>{o.textContent=m+(x||'')+(mb>50?' — ⚠ أكبر من ٥٠ ميغابايت وقد يُرفض في الباقة المجانية':mb>15?' — ⚠ كبير على الجوال، الأفضل ضغطه إلى ٥–١٠ ميغابايت':' ✓');if(mb>15)o.style.color='#f2a0a0'};
