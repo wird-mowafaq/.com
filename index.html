@@ -196,7 +196,12 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
  <select id="cq" aria-label="جودة الفيديو"><option value="1">⚡ سريعة — حجم أصغر</option><option value="2" selected>⚖ متوسطة</option><option value="3">💎 عالية — أبطأ وحجم أكبر</option></select>
  <button id="cdlv" class="btn">🎬 تنزيل فيديو بخلفية</button><button id="cdlc" class="btn red" hidden>✖ إلغاء التسجيل</button>
  <p class="ld" style="padding:4px 0;font-size:.85rem">يُنشأ الفيديو مباشرة في متصفحك وبأسرع من مدة التلاوة. إن لم يدعم متصفحك ذلك يُسجَّل بالزمن الحقيقي، فاترك الصفحة مفتوحة. الحد ٢٠ آية في المرة.</p>
- <p id="cnote" class="ld" style="padding:8px 0 0"></p><p id="cst" class="ld" style="padding:4px 0;line-height:2"></p></div></main>
+ <p id="cnote" class="ld" style="padding:8px 0 0"></p><p id="cst" class="ld" style="padding:4px 0;line-height:2"></p></div>
+ <div class="wbox" id="fdbox"><h3>⬇ تنزيل سورة كاملة (سريع)</h3>
+ <select id="fdrec" aria-label="القارئ"></select><select id="fdsur" aria-label="السورة"></select>
+ <select id="fdpar" aria-label="سرعة التنزيل"><option value="4">سرعة متوازنة (٤ اتصالات)</option><option value="8" selected>سريعة (٨ اتصالات)</option><option value="16">أقصى سرعة (١٦ اتصالًا)</option></select>
+ <button id="fddl" class="btn">⬇ تنزيل السورة MP3</button>
+ <p id="fdst" class="ld" style="padding:8px 0 0;line-height:2"></p></div></main>
 <main id="me"><div class="wbox"><h3>📊 نشاطي اليوم</h3><div id="mebody"></div></div><div class="wbox"><h3>👤 حسابي</h3><button id="gbtn2" class="btn"></button></div></main>
 <main id="sug"><div class="wbox"><h3>💡 صندوق الاقتراحات</h3><p class="ld" style="padding:0 0 8px">اكتب اقتراحك أو ملاحظتك أو أي مشكلة وجدتها، وسيصل إلى مالك الموقع.</p><textarea id="sbody" maxlength="1000" rows="5" placeholder="اقتراحك…"></textarea><button id="ssend" class="btn">إرسال</button><p id="sst" class="ld" style="padding:4px 0"></p></div><div id="sown" class="wbox" hidden><h3>📥 الاقتراحات الواردة (للمالك)</h3><div id="slist"></div></div></main>
 <main id="stats"><div class="wbox"><h3>📈 الإحصاءات</h3><div id="stbody"></div></div></main>
@@ -434,7 +439,7 @@ async function loadMoreReciters(){
    if(RECITERS.some(x=>sUrl(x.src)===srv))return;
    RECITERS.push({t:'s',name:rc.name+' — '+m.name,src:srv,list:set.join(','),n:set.length});
   }));
-  moreState='';fillReciters();
+  moreState='';fillReciters();if(window.renderFD)renderFD();
  }catch(e){moreState='تعذّر تحميل بقية القراء (القائمة الأساسية تعمل)';fillReciters()}
 }
 async function init(){
@@ -1439,6 +1444,7 @@ function renderMe(){
 }
 $('gbtn2').onclick=()=>$('gbtn').onclick();
 function renderClip(){
+ renderFD();
  const rs=$('crec');if(!rs.options.length)RECITERS.filter(r=>r.t==='a').forEach(r=>rs.add(new Option(r.name,key(r))));
  if(!rs.value)rs.selectedIndex=0;const ss=$('csur');if(!ss.options.length&&surahs.length)surahs.forEach(x=>ss.add(new Option(x.number+'. '+x.name,x.number)));
  $('cnote').textContent=(DL_NEEDS_ACCOUNT&&!usr)?'🔒 التنزيل يتطلب حسابًا: اضغط «تسجيل الدخول» من صفحة «نشاطي» (الاستماع متاح للجميع).':'';cInfo();
@@ -1449,10 +1455,68 @@ $('cdl').onclick=async()=>{
  if(DL_NEEDS_ACCOUNT&&!usr)return alert('التنزيل يتطلب حسابًا: سجّل الدخول من صفحة «نشاطي»');
  const c=cSel(),st=$('cst'),urls=[];if(!c.r)return;
  for(let i=c.a;i<=c.b;i++)urls.push(`https://everyayah.com/data/${c.r.src}/${pad(c.s.number,3)}${pad(i,3)}.mp3`);
- try{const parts=[];for(let i=0;i<urls.length;i++){st.textContent=`جارٍ التحميل ${ar(i+1)} / ${ar(urls.length)}…`;const r=await fetch(urls[i]);if(!r.ok)throw 0;parts.push(await r.arrayBuffer())}
+ try{const parts=new Array(urls.length);let nx=0,dn=0;await Promise.all(Array.from({length:Math.min(6,urls.length)},async()=>{while(nx<urls.length){const i=nx++;const r=await fetch(urls[i]);if(!r.ok)throw 0;parts[i]=await r.arrayBuffer();st.textContent=`جارٍ التحميل ${ar(++dn)} / ${ar(urls.length)}…`}}));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(parts,{type:'audio/mpeg'}));a.download='quran-'+pad(c.s.number,3)+'-'+c.a+'-'+c.b+'.mp3';a.click();st.textContent='تم التنزيل ✓';logEv('download',c.r.name,c.s.name);
  }catch(e){st.textContent='تعذّر الدمج التلقائي بسبب قيود المتصفح، حمّل كل آية من رابطها: ';urls.forEach((u,i)=>{const l=document.createElement('a');l.href=u;l.target='_blank';l.textContent=ar(c.a+i)+' ';l.style.color='var(--gold)';st.append(l)});logEv('download',c.r.name,c.s.name)}
 };
+
+/* ===== تنزيل سورة كاملة بسرعة (أجزاء متوازية) — للقراء t:'s' ومنهم محمد اللحيدان ===== */
+const FD_DEFAULT='s:https://server8.mp3quran.net/lhdan/';
+function renderFD(){
+ const rs=$('fdrec');if(!rs||!surahs.length)return;
+ const keep=rs.value||FD_DEFAULT;rs.innerHTML='';
+ RECITERS.filter(r=>r.t==='s').forEach(r=>rs.add(new Option(rLabel(r),key(r))));
+ if([...rs.options].some(o=>o.value===keep))rs.value=keep;
+ fdSur();
+}
+function fdSur(){
+ const r=RECITERS.find(y=>key(y)===$('fdrec').value),ss=$('fdsur');if(!r)return;
+ const keep=ss.value;ss.innerHTML='';
+ surahs.filter(x=>hasS(r,x.number)).forEach(x=>ss.add(new Option(x.number+'. '+x.name,x.number)));
+ if(keep&&[...ss.options].some(o=>o.value===keep))ss.value=keep;
+}
+async function fdSize(u){
+ try{const h=await fetch(u,{method:'HEAD'});const n=+h.headers.get('content-length');if(n&&(h.headers.get('accept-ranges')||'').includes('bytes'))return n}catch(e){}
+ try{const g=await fetch(u,{headers:{Range:'bytes=0-0'}});const cr=g.headers.get('content-range');if(g.status===206&&cr)return +cr.split('/')[1]}catch(e){}
+ return 0;
+}
+async function fdFetch(u,par,onP){
+ const size=await fdSize(u);
+ if(!size){                                   // بلا دعم الأجزاء: بث مباشر
+  const r=await fetch(u);if(!r.ok)throw new Error('http');
+  const tot=+r.headers.get('content-length')||0,rd=r.body.getReader(),parts=[];let got=0;
+  for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;if(tot)onP(got/tot)}
+  return new Blob(parts,{type:'audio/mpeg'});
+ }
+ const CH=Math.max(512*1024,Math.ceil(size/par)),jobs=[];
+ for(let a=0;a<size;a+=CH)jobs.push([a,Math.min(a+CH-1,size-1)]);
+ const out=new Array(jobs.length);let got=0,nx=0;
+ const worker=async()=>{while(nx<jobs.length){const i=nx++,[a,b]=jobs[i];
+  for(let t=0;;t++){try{const r=await fetch(u,{headers:{Range:`bytes=${a}-${b}`}});if(r.status!==206&&r.status!==200)throw 0;
+   const buf=await r.arrayBuffer();out[i]=buf;got+=buf.byteLength;onP(got/size);break}catch(e){if(t>=2)throw e}}}};
+ await Promise.all(Array.from({length:Math.min(par,jobs.length)},worker));
+ return new Blob(out,{type:'audio/mpeg'});
+}
+$('fdrec').addEventListener('change',fdSur);
+$('fddl').onclick=async()=>{
+ if(DL_NEEDS_ACCOUNT&&!usr)return alert('التنزيل يتطلب حسابًا: سجّل الدخول من صفحة «نشاطي»');
+ const r=RECITERS.find(y=>key(y)===$('fdrec').value),x=surahs[(+$('fdsur').value)-1],st=$('fdst'),b=$('fddl');
+ if(!r||!x)return;
+ const url=r.src.replace(/\/?$/,'/')+pad(x.number,3)+'.mp3',t0=performance.now();
+ b.disabled=true;st.textContent='جارٍ التنزيل… ٠٪';
+ try{
+  const blob=await fdFetch(url,+$('fdpar').value,p=>st.textContent='جارٍ التنزيل… '+ar(Math.round(p*100))+'٪');
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=r.name.split(' — ')[0]+' - '+pad(x.number,3)+' '+x.name+'.mp3';
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000);
+  st.textContent='تم التنزيل ✓ ('+ar(((blob.size/1048576)/((performance.now()-t0)/1000)).toFixed(1))+' ميغابايت/ث)';
+  try{logEv('download',r.name,x.name)}catch(e){}
+ }catch(e){
+  st.textContent='تعذّر الدمج التلقائي، فُتح الرابط المباشر: ';
+  const l=document.createElement('a');l.href=url;l.target='_blank';l.rel='noopener';l.textContent='فتح الملف';l.style.color='var(--gold)';st.append(l);window.open(url,'_blank','noopener');
+ }
+ b.disabled=false;
+};
+
 async function renderStats(){
  const b=$('stbody');b.textContent='جارٍ التحميل…';let E=[];
  let AE=[];try{const RAW=await api('/rest/v1/events?select=kind,reciter,surah,dev,who,created&order=id.desc&limit=20000');E=RAW.filter(e=>!String(e.reciter||'').startsWith('§'));AE=RAW.filter(e=>e.reciter===ACTK)}catch(e){b.textContent=e.message;return}

@@ -73,6 +73,7 @@
     </div>
 
     <div class="bar">
+      <button id="lh" class="primary">الشيخ محمد اللحيدان</button>
       <button id="all">تحديد الكل</button>
       <button id="none">إلغاء التحديد</button>
       <button id="dl" class="primary">تنزيل المحدد</button>
@@ -101,16 +102,25 @@ async function init(){
     ]);
     reciters = r.reciters || [];
     suwar = s.suwar || [];
-    fillReciters('');
+    pickLuhaidan();
   }catch(e){
     $('reciter').innerHTML = '<option>تعذّر تحميل القراء، تحقق من الاتصال</option>';
   }
 }
 
-function fillReciters(term){
-  const t = term.trim();
-  const list = reciters.filter(r => !t || r.name.includes(t));
+const norm = x => (x || '').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+
+function pickLuhaidan(){
+  const r = reciters.find(x => norm(x.name).includes('لحيدان'));
+  if(r){ $('q').value = ''; fillReciters('', r.id); }
+  else { $('q').value = 'لحيدان'; fillReciters('لحيدان'); }
+}
+
+function fillReciters(term, keepId){
+  const t = norm(term);
+  const list = reciters.filter(r => !t || norm(r.name).includes(t));
   $('reciter').innerHTML = list.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  if(keepId) $('reciter').value = keepId;
   onReciter();
 }
 
@@ -248,6 +258,7 @@ async function downloadMany(rows){
 
 // ---------- الأحداث ----------
 $('q').addEventListener('input', e => fillReciters(e.target.value));
+$('lh').onclick = pickLuhaidan;
 $('reciter').addEventListener('change', onReciter);
 $('moshaf').addEventListener('change', onMoshaf);
 $('all').onclick = () => { document.querySelectorAll('.item input').forEach(c => c.checked = true); updateCount(); };
