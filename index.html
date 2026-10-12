@@ -157,6 +157,8 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
 .prow:last-child{border-bottom:0}.prow.nx{background:rgba(212,170,85,.18);border-radius:10px;color:var(--gold);font-weight:700;border-bottom-color:transparent}.prow.sr{color:var(--mist)}
 #nmod .wbox>.btn,#nbox>.btn,#pgeo{display:block;width:100%;margin-bottom:8px}
 #prayer summary{cursor:pointer;color:var(--gold);padding:6px 0}#prayer details{margin:2px 0 8px}
+#abox .arow{display:flex;align-items:center;gap:8px;padding:6px 0;line-height:1.8}#abox .arow2{display:flex;flex-wrap:wrap;gap:6px 14px;padding:4px 0 8px}#abox .arow2 label{display:flex;align-items:center;gap:5px}#abox #atest{display:block;width:100%;margin-top:6px}
+#astop{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:97;background:#143632;color:var(--gold);border:1px solid var(--gold);border-radius:30px;padding:12px 22px;font-family:inherit;font-size:1rem;box-shadow:0 6px 24px rgba(0,0,0,.5)}#astop[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -224,6 +226,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
   <button id="wnoff" class="btn red" style="margin-top:8px" hidden>إيقاف التنبيه</button>
   <p class="ld" style="padding:8px 0 0;font-size:.85rem;line-height:1.8">يصلك التنبيه في الوقت المحدد بتوقيت جهازك، بشرط أن يكون الموقع (أو التطبيق المثبّت) مفتوحًا ولو في الخلفية. على iPhone ثبّت الموقع على الشاشة الرئيسية أولًا ثم افتحه منها.</p></div>
 </main>
+<button id="astop" hidden>⏹ إيقاف الأذان</button>
 <main id="prayer">
  <div class="wbox"><h3>🕌 مواقيت الصلاة</h3>
   <select id="pc" aria-label="الدولة"></select>
@@ -234,6 +237,13 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
    <select id="ps" aria-label="مذهب العصر"><option value="">العصر: حسب البلد (موصى به)</option><option value="0">العصر: الجمهور (ظل المثل)</option><option value="1">العصر: الحنفي (ظل المثلين)</option></select>
   </details>
  </div>
+  <div class="wbox" id="abox"><h3>🔊 الأذان</h3>
+   <label class="arow"><input type="checkbox" id="aon"> تشغيل صوت الأذان عند دخول وقت الصلاة</label>
+   <div id="aps" class="arow2"></div>
+   <label class="arow">مستوى الصوت <input type="range" id="avol" min="0.2" max="1" step="0.1" value="1"></label>
+   <button id="atest" class="btn">▶ تجربة الأذان</button>
+   <p id="anote" class="ld" style="padding:8px 0 0;font-size:.85rem;line-height:1.8"></p>
+  </div>
  <div class="wbox"><div id="pdate" class="ld" style="padding:0 0 8px"></div><div id="pnext" class="pnext"></div><div id="plist"></div><p id="pnote" class="ld" style="padding:12px 0 4px;font-size:.85rem;line-height:1.8"></p><button id="pretry" class="btn" hidden>↻ إعادة المحاولة</button></div>
 </main>
 <main id="mushaf">
@@ -637,17 +647,86 @@ function go(i){
  mode='s';AU[1-ai].pause();
  if(!hasS(r,surah.number)){toast('هذه السورة غير متوفرة لهذا القارئ — اختر قارئًا آخر');stop();return}
  const url=r.src.replace(/\/?$/,'/')+pad(surah.number,3)+'.mp3';
- if(url!==curUrl){curUrl=url;starts=[];pend=i;audio.src=url;audio.dataset.u='';toast('تزامن الآيات مع هذا القارئ تقريبي')}
+ if(url!==curUrl){curUrl=url;starts=[];aligned=false;pend=i;audio.src=url;audio.dataset.u='';toast('جارٍ ضبط تزامن الآيات مع الصوت…')}
  else if(starts.length)audio.currentTime=starts[i];
  audio.play().then(()=>setPlay(true)).catch(()=>setPlay(false));
+}
+/* ضبط حدود الآيات في ملف سورة كاملة: يختار أنسب وقفات الصوت بحيث تتناسب أطوال الآيات مع أطوال نصوصها (بدل التقدير النسبي وحده) */
+function ayW(t){t=String(t);const strip=x=>x.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640\s]/g,'');
+ let w=strip(t).length+3+3*(t.match(/\u0653/g)||[]).length;   // المدّ يطيل الزمن
+ const f=t.trim().split(/\s+/)[0]||'',fb=strip(f);if(fb.length>0&&fb.length<=5&&/\u0653/.test(f))w+=6*fb.length;   // الحروف المقطّعة (طسٓ، الٓمٓ…) تُمدّ طويلًا
+ return w}
+function alignAyahs(d0,sr,W,rate,est,span,WDUR,WVAL){WDUR=WDUR||3;WVAL=WVAL==null?0.07:WVAL;
+ const hop=0.02,hn=Math.max(1,Math.round(sr*hop)),n=Math.floor(d0.length/hn),N=W.length;
+ if(n<60||!N||!(rate>0))return null;
+ const e=new Float32Array(n),sm=new Float32Array(n);
+ for(let i=0;i<n;i++){const o=i*hn,m=Math.min(hn*2,d0.length-o);let s=0,c=0;for(let k=0;k<m;k+=3){const q=d0[o+k];s+=q*q;c++}e[i]=10*Math.log10(s/(c||1)+1e-10)}
+ for(let i=0;i<n;i++){let s=0,c=0;for(let k=Math.max(0,i-3);k<=Math.min(n-1,i+3);k++){s+=e[k];c++}sm[i]=s/c}
+ const C=[],D=[];
+ for(let i=2;i<n-2;i++){
+  let lm=true;for(let k=Math.max(0,i-7);k<=Math.min(n-1,i+7);k++)if(sm[k]<sm[i]){lm=false;break}
+  if(!lm)continue;
+  let mx=-1e9;for(let k=Math.max(0,i-40);k<=Math.min(n-1,i+40);k++)if(sm[k]>mx)mx=sm[k];
+  const dep=Math.min(mx-sm[i],20);if(dep<5)continue;
+  const t=i*hop+hop/2,L=C.length-1;
+  if(L>=0&&t-C[L]<0.3){if(dep>D[L]){C[L]=t;D[L]=dep}continue}
+  C.push(t);D.push(dep);
+ }
+ {const ins=(t,dp)=>{let k=0;while(k<C.length&&C[k]<t)k++;if(k<C.length&&Math.abs(C[k]-t)<0.15)return;C.splice(k,0,t);D.splice(k,0,dp)};ins(est,2);ins(n*hop-0.05,2)}
+ const M=C.length;if(M<N+1)return null;
+ let sumE=0;for(let j=0;j<N;j++)sumE+=Math.max(0.3,W[j]*rate);
+ const est2=est+sumE;
+ let prev=new Float64Array(M).fill(1e18);const back=[];
+ for(let i=0;i<M;i++)if(Math.abs(C[i]-est)<=span)prev[i]=0.5*Math.abs(C[i]-est)/span-0.05*D[i];
+ for(let j=0;j<N;j++){
+  const Ej=Math.max(0.3,W[j]*rate),cur=new Float64Array(M).fill(1e18),bk=new Int32Array(M).fill(-1);
+  let lo=0;
+  for(let c=0;c<M;c++){
+   while(lo<c&&C[lo]<C[c]-2.8*Ej)lo++;
+   let best=1e18,bi=-1;
+   for(let p=lo;p<c;p++){
+    const d=C[c]-C[p];if(d<0.4*Ej||prev[p]>=1e17)continue;
+    const v=prev[p]+WDUR*((d-Ej)/Ej)*((d-Ej)/Ej);
+    if(v<best){best=v;bi=p}
+   }
+   if(bi>=0){cur[c]=best-WVAL*D[c];bk[c]=bi}
+  }
+  back.push(bk);prev=cur;
+ }
+ let bc=-1,bv=1e18;
+ for(let c=0;c<M;c++){if(prev[c]>=1e17)continue;const v=prev[c]+0.5*Math.pow((C[c]-est2)/(2*span+sumE*0.1),2);if(v<bv){bv=v;bc=c}}
+ if(bc<0)return null;
+ const B=[C[bc]];let c=bc;
+ for(let j=N-1;j>=0;j--){c=back[j][c];if(c<0)return null;B.push(C[c])}
+ return B.reverse();
+}
+let aligned=false,offA=parseFloat(localStorage.getItem('offA')||'0.15');
+const fdSz=async u=>{try{const r=await fetch(u,{method:'HEAD'});const n=parseInt(r.headers.get('content-length')||'0',10);return n>0?n:0}catch(e){return 0}};
+function applyStarts(url,a){if(url!==curUrl||mode!=='s')return;starts=a;aligned=true;toast('تم ضبط تزامن الآيات مع الصوت')}
+/* ضبط دقيق: تحليل الصوت نفسه والبحث عن وقفات نهايات الآيات (الملفات حتى ٢٠ ميغا، ويُحفظ الناتج) */
+async function refineStarts(url,w){
+ try{
+  const ck='ay3:'+url+'|'+bo;let c=null;try{c=localStorage.getItem(ck)}catch(e){}
+  if(c){const a=JSON.parse(c);if(Array.isArray(a)&&a.length===w.length){applyStarts(url,a);return}}
+  const size=await fdSz(url);if(!size||size>20e6)return;
+  const r=await fetch(url);if(!r.ok)return;const ab=await r.arrayBuffer();
+  const OC=window.OfflineAudioContext||window.webkitOfflineAudioContext;if(!OC)return;
+  const buf=await new OC(1,16000,16000).decodeAudioData(ab);
+  const tot=w.reduce((x,y)=>x+y,0),B=alignAyahs(buf.getChannelData(0),buf.sampleRate,w,buf.duration/tot,0,Math.max(4,buf.duration*0.02));
+  if(!B||B.length!==w.length+1)return;
+  const a=B.slice(0,-1).map(x=>Math.round(x*100)/100);
+  try{localStorage.setItem(ck,JSON.stringify(a))}catch(e){}
+  applyStarts(url,a);
+ }catch(e){}
 }
 // تقدير زمن بداية كل آية (والبسملة) من طول النص، لملفات السور الكاملة
 function meta(){
  if(this!==audio||mode!=='s'||!audio.duration)return;
- const w=items.map(a=>a.text.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640 ]/g,'').length+4);
+ const w=items.map(a=>ayW(a.text));
  let acc=0;const tot=w.reduce((x,y)=>x+y,0);
  starts=w.map(x=>{const t=acc/tot*audio.duration;acc+=x;return t});
  if(pend>0)audio.currentTime=starts[pend];pend=0;
+ refineStarts(curUrl,w);
 }
 AU.forEach(el=>{
  el.preload='auto';el.onloadedmetadata=meta;
@@ -657,7 +736,7 @@ AU.forEach(el=>{
 let off=parseFloat(localStorage.getItem('off')||'0.8');   // الآية تظهر أبكر من تقديري بهذا القدر (ثوانٍ)
 setInterval(()=>{
  if(mode!=='s'||!starts.length||audio.paused)return;
- const t=audio.currentTime+off; let k=0;
+ const t=audio.currentTime+(aligned?offA:off); let k=0;
  for(let j=0;j<starts.length;j++)if(t>=starts[j])k=j;
  if(k!==vi){
   if(wird&&surah.number===wird.s&&items[k]&&!items[k].bsm&&items[k].numberInSurah>wird.a){wird=null;toast('أتممت ورد اليوم 🤍');stop();return}   // نهاية ورد اليوم مع ملفات السور الكاملة
@@ -665,8 +744,9 @@ setInterval(()=>{
 },100);
 function nudge(d){
  if(mode!=='s'){toast('هذا القارئ متزامن بدقة ولا يحتاج تعديلًا');return}
- off+=d;localStorage.setItem('off',off);
- toast(off>=0?`الآية تظهر أبكر بـ ${off.toFixed(1)} ثانية`:`الآية تظهر أبطأ بـ ${(-off).toFixed(1)} ثانية`);
+ if(aligned){offA+=d;localStorage.setItem('offA',offA)}else{off+=d;localStorage.setItem('off',off)}
+ const o=aligned?offA:off;
+ toast(o>=0?`الآية تظهر أبكر بـ ${o.toFixed(1)} ثانية`:`الآية تظهر أبطأ بـ ${(-o).toFixed(1)} ثانية`);
 }
 function setPlay(p){playing=p;$('play').textContent=p?'❚❚':'▶'}
 function stop(){AU.forEach(a=>a.pause());setPlay(false)}
@@ -1298,11 +1378,11 @@ $('mlater').onclick=()=>{$('nmod').hidden=true};
 $('nmod').addEventListener('click',e=>{if(e.target===$('nmod'))$('nmod').hidden=true});
 
 /* ===== مواقيت الصلاة (Aladhan API) — طريقة حساب وتوقيت خاص بكل بلد/مدينة ===== */
-const PMN={0:'الجعفري (شيعي اثنا عشري)',1:'جامعة العلوم الإسلامية — كراتشي',2:'أمريكا الشمالية (ISNA)',3:'رابطة العالم الإسلامي',4:'أم القرى — مكة المكرمة',5:'الهيئة المصرية العامة للمساحة',7:'جامعة طهران',8:'منطقة الخليج',9:'الكويت',10:'قطر',11:'سنغافورة',12:'اتحاد المنظمات الإسلامية بفرنسا',13:'رئاسة الشؤون الدينية — تركيا',14:'الإدارة الروحية لمسلمي روسيا',15:'لجنة رؤية الهلال',16:'دبي',17:'ماليزيا (جاكيم)',18:'تونس',19:'الجزائر',20:'إندونيسيا',21:'المغرب',22:'لشبونة — البرتغال',23:'وزارة الأوقاف الأردنية'};
+const PMN={1:'جامعة العلوم الإسلامية — كراتشي',2:'أمريكا الشمالية (ISNA)',3:'رابطة العالم الإسلامي',4:'أم القرى — مكة المكرمة',5:'الهيئة المصرية العامة للمساحة',7:'جامعة طهران',8:'منطقة الخليج',9:'الكويت',10:'قطر',11:'سنغافورة',12:'اتحاد المنظمات الإسلامية بفرنسا',13:'رئاسة الشؤون الدينية — تركيا',14:'الإدارة الروحية لمسلمي روسيا',15:'لجنة رؤية الهلال',16:'دبي',17:'ماليزيا (جاكيم)',18:'تونس',19:'الجزائر',20:'إندونيسيا',21:'المغرب',22:'لشبونة — البرتغال',23:'وزارة الأوقاف الأردنية'};
 /* [رمز, الاسم, طريقة الحساب, مذهب العصر (0 جمهور/1 حنفي), [[المدينة, خط العرض, خط الطول, المنطقة الزمنية]]] */
 const CT=[
 ['SA','السعودية',4,0,[['مكة المكرمة',21.4225,39.8262,'Asia/Riyadh'],['المدينة المنورة',24.4686,39.6142,'Asia/Riyadh'],['الرياض',24.7136,46.6753,'Asia/Riyadh'],['جدة',21.4858,39.1925,'Asia/Riyadh'],['الدمام',26.4207,50.0888,'Asia/Riyadh'],['أبها',18.2164,42.5053,'Asia/Riyadh'],['تبوك',28.3838,36.555,'Asia/Riyadh']]],
-['JO','الأردن',23,0,[['عمّان',31.9539,35.9106,'Asia/Amman'],['إربد',32.5556,35.8479,'Asia/Amman'],['الزرقاء',32.0728,36.0876,'Asia/Amman'],['العقبة',29.5321,35.0063,'Asia/Amman'],['السلط',32.0392,35.7272,'Asia/Amman'],['الكرك',31.1853,35.7048,'Asia/Amman'],['معان',30.1962,35.7341,'Asia/Amman']]],
+['JO','الأردن',23,0,[['عمّان',31.9539,35.9106,'Asia/Amman'],['إربد',32.5556,35.8479,'Asia/Amman'],['الزرقاء',32.0728,36.0876,'Asia/Amman'],['العقبة',29.5321,35.0063,'Asia/Amman'],['السلط',32.0392,35.7272,'Asia/Amman'],['الكرك',31.1853,35.7048,'Asia/Amman'],['معان',30.1962,35.7341,'Asia/Amman'],['المفرق',32.3406,36.208,'Asia/Amman']]],
 ['PS','فلسطين',23,0,[['القدس',31.7683,35.2137,'Asia/Jerusalem'],['غزة',31.5017,34.4668,'Asia/Gaza'],['رام الله',31.9038,35.2034,'Asia/Hebron'],['نابلس',32.2211,35.2544,'Asia/Hebron'],['الخليل',31.5326,35.0998,'Asia/Hebron']]],
 ['EG','مصر',5,0,[['القاهرة',30.0444,31.2357,'Africa/Cairo'],['الإسكندرية',31.2001,29.9187,'Africa/Cairo'],['أسوان',24.0889,32.8998,'Africa/Cairo'],['الأقصر',25.6872,32.6396,'Africa/Cairo'],['بورسعيد',31.2653,32.3019,'Africa/Cairo']]],
 ['SY','سوريا',5,0,[['دمشق',33.5138,36.2765,'Asia/Damascus'],['حلب',36.2021,37.1343,'Asia/Damascus'],['حمص',34.7324,36.7137,'Asia/Damascus'],['اللاذقية',35.5317,35.7919,'Asia/Damascus']]],
@@ -1346,6 +1426,7 @@ const CT=[
 ['SN','السنغال',3,0,[['داكار',14.7167,-17.4677,'Africa/Dakar']]]
 ];
 let PC=WL('pcfg',null),PT=null,PINIT=false,PTOK=0;
+if(PC&&String(PC.m)==='0'){PC.m='';try{localStorage.setItem('pcfg',JSON.stringify(PC))}catch(e){}}   // أُزيلت الطريقة الجعفرية
 const dtz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||''}catch(e){return ''}};
 const ctByTz=tz=>CT.find(c=>c[4].some(x=>x[3]===tz));
 if(!PC||!CT.some(c=>c[0]===PC.k)){
@@ -1443,6 +1524,72 @@ function ptInit(){
 }
 function renderPrayer(){ptInit();$('pc').value=PC.k;ptLoad()}
 setInterval(ptTick,1000);
+
+/* ===== الأذان عند دخول الوقت (بموافقة صاحب الجهاز) =====
+   ملفا الصوت يوضعان بجانب index.html: adhan.mp3 (وadhan-fajr.mp3 اختياري للفجر).
+   يعمل ما دامت الصفحة مفتوحة (ولو في الخلفية بعد تفعيله بإذنك)، ولا يعمل بعد إغلاق الصفحة تمامًا. */
+const AN={fajr:'الفجر',dhuhr:'الظهر',asr:'العصر',maghrib:'المغرب',isha:'العشاء'};
+let AD=WL('adhan',null);if(!AD||typeof AD!=='object')AD={on:false,ok:false,p:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1},v:1,last:{}};
+const adSave=()=>{try{localStorage.setItem('adhan',JSON.stringify(AD))}catch(e){}};
+const adAud=new Audio();adAud.preload='none';
+let adKeep=null,adPlaying=false;
+function silentWav(){const sr=8000,n=sr,b=new ArrayBuffer(44+n*2),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+ w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+ return URL.createObjectURL(new Blob([b],{type:'audio/wav'}))}
+/* إبقاء الصفحة حيّة في الخلفية: صوت صامت متكرر + بطاقة تحكم الوسائط (يبدأ بلمسة من المستخدم) */
+function adKeepOn(){
+ if(!AD.on||!AD.ok)return;
+ try{if(!adKeep){adKeep=new Audio(silentWav());adKeep.loop=true;adKeep.volume=0.01}
+  adKeep.play().catch(()=>{});
+  if('mediaSession' in navigator){navigator.mediaSession.metadata=new MediaMetadata({title:'الأذان مفعّل',artist:'وِرد',artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'}]});
+   try{navigator.mediaSession.setActionHandler('stop',()=>adStop(true));navigator.mediaSession.setActionHandler('pause',null)}catch(e){}}
+ }catch(e){}
+}
+function adKeepOff(){try{if(adKeep){adKeep.pause()}}catch(e){}}
+function adStop(){try{adAud.pause();adAud.currentTime=0}catch(e){}adPlaying=false;$('astop').hidden=true;if(AD.on)adKeepOn()}
+adAud.onended=()=>{adPlaying=false;$('astop').hidden=true};
+async function adPlay(k,test){
+ const src=(k==='fajr'&&!adAud._nf)?'adhan-fajr.mp3':'adhan.mp3';
+ adAud.onerror=()=>{if(src==='adhan-fajr.mp3'){adAud._nf=1;adPlay(k,test)}else{banner('ملف الأذان غير موجود: ضع adhan.mp3 بجانب index.html');adPlaying=false;$('astop').hidden=true}};
+ adAud.src=src;adAud.volume=AD.v||1;
+ try{await adAud.play();adPlaying=true;$('astop').hidden=false;
+  if('mediaSession' in navigator){try{navigator.mediaSession.metadata=new MediaMetadata({title:test?'تجربة الأذان':'أذان '+(AN[k]||''),artist:'وِرد',artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'}]})}catch(e){}}
+ }catch(e){banner('اضغط أي مكان في الصفحة مرة واحدة ليُسمح بتشغيل الأذان تلقائيًا')}
+}
+function adTick(){
+ if(!AD.on||!AD.ok)return;
+ if(!PT){if(!adTick._l||Date.now()-adTick._l>60000){adTick._l=Date.now();ptLoad()}return}
+ const n=tzNow(PT.tz);
+ if(n.date!==PT.date){ptLoad();return}
+ for(const k in AN){
+  if(!AD.p[k])continue;const t=PT.s[k];
+  if(t!=null&&n.sec>=t&&n.sec<t+120&&AD.last[k]!==PT.date){
+   AD.last[k]=PT.date;adSave();
+   notify('حان الآن موعد صلاة '+AN[k],'الله أكبر، الله أكبر 🕌','wird-adhan-'+k);
+   adPlay(k,false);break;
+  }
+ }
+}
+function adUI(){
+ const box=$('aps');if(!box)return;box.textContent='';
+ for(const k in AN){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.checked=!!AD.p[k];
+  c.onchange=()=>{AD.p[k]=c.checked?1:0;adSave()};l.append(c,document.createTextNode(AN[k]));box.append(l)}
+ $('aon').checked=!!(AD.on&&AD.ok);$('avol').value=AD.v||1;
+ $('anote').textContent=(AD.on&&AD.ok)?'✅ مفعّل — سيُرفع الأذان عند دخول كل وقت ما دامت الصفحة مفتوحة (ويمكنك تركها في الخلفية). إغلاق الصفحة تمامًا أو إيقاف الهاتف للتطبيق يوقف الأذان، وعلى iPhone قد يتوقف في الخلفية.':'الأذان متوقف. عند التفعيل سنطلب موافقتك على تشغيل الصوت تلقائيًا وعلى الإشعارات.';
+}
+async function adEnable(){
+ if(!confirm('هل توافق على أن يشغّل الموقع صوت الأذان تلقائيًا عند دخول وقت الصلاة، حتى وهو في الخلفية على هاتفك؟\n\nيمكنك إيقافه في أي وقت من هذه الصفحة.')){AD.on=false;AD.ok=false;adSave();adUI();return}
+ AD.ok=true;AD.on=true;adSave();
+ if(nSup()&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(e){}}
+ adKeepOn();adUI();ptLoad();banner('تم تفعيل الأذان');
+}
+$('aon').onchange=()=>{if($('aon').checked)adEnable();else{AD.on=false;adSave();adKeepOff();adStop();adUI();banner('أُوقف الأذان')}};
+$('avol').oninput=()=>{AD.v=+$('avol').value;adSave();adAud.volume=AD.v};
+$('atest').onclick=()=>{adPlay('dhuhr',true)};
+$('astop').onclick=()=>adStop();
+addEventListener('pointerdown',()=>{if(AD.on&&AD.ok&&(!adKeep||adKeep.paused))adKeepOn()},{passive:true});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)adTick()});
+setInterval(adTick,1000);adUI();if(AD.on&&AD.ok)setTimeout(ptLoad,2500);
 
 /* ===== التنقل والنشاط والمقاطع والإحصاءات ===== */
 const PAGES=['home','mushaf','dhikr','wird','prayer','clip','me','stats','sug'];
@@ -1764,7 +1911,7 @@ $('cdlv').onclick=async()=>{
   const bufs=new Array(its.length);let got=0,aerr=null;const nx={v:0};
   async function sFill(){
    if(!hasS(c.r,c.s.number))throw new Error('هذه السورة غير متوفرة لهذا القارئ');
-   const Wd=all.map(a=>a.text.split(' ').filter(Boolean).length),tot=Wd.reduce((p,q)=>p+q,0),cum=[0];Wd.forEach(w=>cum.push(cum[cum.length-1]+w));
+   const Wd=all.map(a=>ayW(a.text)),b0w=(c.s.number!==1&&c.s.number!==9)?ayW(BSM):0,tot=b0w+Wd.reduce((p,q)=>p+q,0),cum=[b0w];Wd.forEach(w=>cum.push(cum[cum.length-1]+w));
    const fa=cum[c.a-1]/tot,fb=cum[c.b]/tot,u=c.r.src.replace(/\/?$/,'/')+pad(c.s.number,3)+'.mp3';
    st.textContent='جارٍ تحميل تلاوة '+c.r.name+'…';
    const size=await fdSize(u);let ab,f0=0,f1=1;
@@ -1776,8 +1923,10 @@ $('cdlv').onclick=async()=>{
    const buf=await AC.decodeAudioData(ab),ds=buf.duration,sr=buf.sampleRate,d0=buf.getChannelData(0),wn=Math.round(sr*0.06);
    const tm=f=>(f-f0)/(f1-f0)*ds;
    const snap=t=>{let best=t,bv=1e9;const lo=Math.max(0,t-1.5),hi=Math.min(ds-0.1,t+1.5);for(let x=lo;x<=hi;x+=0.05){const i0=Math.floor(x*sr);let e=0;for(let k=0;k<wn;k+=4){const q=d0[i0+k]||0;e+=q*q}e=e/(wn/4);const v=e*(1+0.15*Math.abs(x-t));if(v<bv){bv=v;best=x+0.03}}return best};
-   const B=[];for(let k=0;k<=its.length;k++)B.push(snap(tm(cum[c.a-1+k]/tot)));
-   for(let k=1;k<B.length;k++)if(B[k]<=B[k-1]+0.3)B[k]=B[k-1]+0.3;
+   let B=null;
+   try{B=alignAyahs(d0,sr,Wd.slice(c.a-1,c.b),(ds/(f1-f0))/tot,tm(cum[c.a-1]/tot),Math.max(6,ds*0.1));if(B&&B.length!==its.length+1)B=null}catch(e){B=null}
+   if(!B){B=[];for(let k=0;k<=its.length;k++)B.push(snap(tm(cum[c.a-1+k]/tot)));
+   for(let k=1;k<B.length;k++)if(B[k]<=B[k-1]+0.3)B[k]=B[k-1]+0.3}
    for(let i=0;i<its.length;i++){const s0=Math.max(0,Math.floor(B[i]*sr)),s1=Math.min(buf.length,Math.floor(B[i+1]*sr)),n=Math.max(1,s1-s0),o=AC.createBuffer(buf.numberOfChannels,n,sr);
     for(let ch=0;ch<buf.numberOfChannels;ch++)o.getChannelData(ch).set(buf.getChannelData(ch).subarray(s0,s0+n));bufs[i]=o}
   }
