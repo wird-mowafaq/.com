@@ -1649,7 +1649,7 @@ async function renderSide(local){
   LINKS=(Array.isArray(j.links)?j.links:[]).filter(x=>x&&x.title&&/^https?:\/\//i.test(x.url))}
  box.innerHTML='';if(!LINKS.length)box.innerHTML='<p class="ld">لم تُضَف حسابات بعد.</p>';
  LINKS.forEach((x,i)=>{const row=document.createElement('div');row.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:8px';
-  const a=document.createElement('a');a.href=x.url;a.target='_blank';a.rel='noopener noreferrer';a.className='btn';a.style.cssText='flex:1;text-align:start;text-decoration:none;display:block;margin:0';a.textContent=ICON(x.url)+' '+x.title;row.append(a);
+  const a=document.createElement('a');a.href=/^https?:\/\//i.test(String(x.url||'').trim())?String(x.url).trim():'#';a.target='_blank';a.rel='noopener noreferrer';a.className='btn';a.style.cssText='flex:1;text-align:start;text-decoration:none;display:block;margin:0';a.textContent=ICON(x.url)+' '+x.title;row.append(a);
   if(isOwner())row.append(mkbtn('✕',1,async()=>{try{LINKS.splice(i,1);await saveLinks();renderSide(true)}catch(e){banner(e.message);renderSide()}}));
   box.append(row)});
 }
