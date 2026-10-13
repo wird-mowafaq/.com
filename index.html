@@ -1378,7 +1378,7 @@ $('mlater').onclick=()=>{$('nmod').hidden=true};
 $('nmod').addEventListener('click',e=>{if(e.target===$('nmod'))$('nmod').hidden=true});
 
 /* ===== مواقيت الصلاة (Aladhan API) — طريقة حساب وتوقيت خاص بكل بلد/مدينة ===== */
-const PMN={1:'جامعة العلوم الإسلامية — كراتشي',2:'أمريكا الشمالية (ISNA)',3:'رابطة العالم الإسلامي',4:'أم القرى — مكة المكرمة',5:'الهيئة المصرية العامة للمساحة',7:'جامعة طهران',8:'منطقة الخليج',9:'الكويت',10:'قطر',11:'سنغافورة',12:'اتحاد المنظمات الإسلامية بفرنسا',13:'رئاسة الشؤون الدينية — تركيا',14:'الإدارة الروحية لمسلمي روسيا',15:'لجنة رؤية الهلال',16:'دبي',17:'ماليزيا (جاكيم)',18:'تونس',19:'الجزائر',20:'إندونيسيا',21:'المغرب',22:'لشبونة — البرتغال',23:'وزارة الأوقاف الأردنية'};
+const PMN={1:'جامعة العلوم الإسلامية — كراتشي',2:'أمريكا الشمالية (ISNA)',3:'رابطة العالم الإسلامي',4:'أم القرى — مكة المكرمة',5:'الهيئة المصرية العامة للمساحة',8:'منطقة الخليج',9:'الكويت',10:'قطر',11:'سنغافورة',12:'اتحاد المنظمات الإسلامية بفرنسا',13:'رئاسة الشؤون الدينية — تركيا',14:'الإدارة الروحية لمسلمي روسيا',15:'لجنة رؤية الهلال',16:'دبي',17:'ماليزيا (جاكيم)',18:'تونس',19:'الجزائر',20:'إندونيسيا',21:'المغرب',22:'لشبونة — البرتغال',23:'وزارة الأوقاف الأردنية'};
 /* [رمز, الاسم, طريقة الحساب, مذهب العصر (0 جمهور/1 حنفي), [[المدينة, خط العرض, خط الطول, المنطقة الزمنية]]] */
 const CT=[
 ['SA','السعودية',4,0,[['مكة المكرمة',21.4225,39.8262,'Asia/Riyadh'],['المدينة المنورة',24.4686,39.6142,'Asia/Riyadh'],['الرياض',24.7136,46.6753,'Asia/Riyadh'],['جدة',21.4858,39.1925,'Asia/Riyadh'],['الدمام',26.4207,50.0888,'Asia/Riyadh'],['أبها',18.2164,42.5053,'Asia/Riyadh'],['تبوك',28.3838,36.555,'Asia/Riyadh']]],
@@ -1403,7 +1403,7 @@ const CT=[
 ['SO','الصومال',5,0,[['مقديشو',2.0469,45.3182,'Africa/Mogadishu']]],
 ['DJ','جيبوتي',5,0,[['جيبوتي',11.5721,43.1456,'Africa/Djibouti']]],
 ['TR','تركيا',13,0,[['إسطنبول',41.0082,28.9784,'Europe/Istanbul'],['أنقرة',39.9334,32.8597,'Europe/Istanbul'],['إزمير',38.4237,27.1428,'Europe/Istanbul'],['بورصة',40.1885,29.061,'Europe/Istanbul'],['قونية',37.8746,32.4932,'Europe/Istanbul']]],
-['IR','إيران',7,0,[['طهران',35.6892,51.389,'Asia/Tehran'],['مشهد',36.2605,59.6168,'Asia/Tehran'],['أصفهان',32.6546,51.668,'Asia/Tehran'],['شيراز',29.5918,52.5837,'Asia/Tehran']]],
+['IR','إيران',3,0,[['طهران',35.6892,51.389,'Asia/Tehran'],['مشهد',36.2605,59.6168,'Asia/Tehran'],['أصفهان',32.6546,51.668,'Asia/Tehran'],['شيراز',29.5918,52.5837,'Asia/Tehran']]],
 ['PK','باكستان',1,1,[['كراتشي',24.8607,67.0011,'Asia/Karachi'],['لاهور',31.5204,74.3587,'Asia/Karachi'],['إسلام آباد',33.6844,73.0479,'Asia/Karachi'],['بيشاور',34.0151,71.5249,'Asia/Karachi']]],
 ['IN','الهند',1,1,[['دلهي',28.6139,77.209,'Asia/Kolkata'],['مومباي',19.076,72.8777,'Asia/Kolkata'],['حيدر آباد',17.385,78.4867,'Asia/Kolkata'],['كولكاتا',22.5726,88.3639,'Asia/Kolkata']]],
 ['BD','بنغلاديش',1,1,[['دكا',23.8103,90.4125,'Asia/Dhaka'],['شيتاغونغ',22.3569,91.7832,'Asia/Dhaka']]],
@@ -1426,7 +1426,7 @@ const CT=[
 ['SN','السنغال',3,0,[['داكار',14.7167,-17.4677,'Africa/Dakar']]]
 ];
 let PC=WL('pcfg',null),PT=null,PINIT=false,PTOK=0;
-if(PC&&String(PC.m)==='0'){PC.m='';try{localStorage.setItem('pcfg',JSON.stringify(PC))}catch(e){}}   // أُزيلت الطريقة الجعفرية
+if(PC&&(String(PC.m)==='0'||String(PC.m)==='7')){PC.m='';try{localStorage.setItem('pcfg',JSON.stringify(PC))}catch(e){}}   // أُزيلت الطريقة الجعفرية
 const dtz=()=>{try{return Intl.DateTimeFormat().resolvedOptions().timeZone||''}catch(e){return ''}};
 const ctByTz=tz=>CT.find(c=>c[4].some(x=>x[3]===tz));
 if(!PC||!CT.some(c=>c[0]===PC.k)){
@@ -1548,14 +1548,23 @@ function adKeepOn(){
 function adKeepOff(){try{if(adKeep){adKeep.pause()}}catch(e){}}
 function adStop(){try{adAud.pause();adAud.currentTime=0}catch(e){}adPlaying=false;$('astop').hidden=true;if(AD.on)adKeepOn()}
 adAud.onended=()=>{adPlaying=false;$('astop').hidden=true};
-async function adPlay(k,test){
- const src=(k==='fajr'&&!adAud._nf)?'adhan-fajr.mp3':'adhan.mp3';
- adAud.onerror=()=>{if(src==='adhan-fajr.mp3'){adAud._nf=1;adPlay(k,test)}else{banner('ملف الأذان غير موجود: ضع adhan.mp3 بجانب index.html');adPlaying=false;$('astop').hidden=true}};
- adAud.src=src;adAud.volume=AD.v||1;
- try{await adAud.play();adPlaying=true;$('astop').hidden=false;
+/* التشغيل يبدأ فورًا داخل لمسة المستخدم (بلا await قبله)، وإلا يمنع المتصفح الصوت */
+function adStart(list,test,k){
+ adAud.src=list[0];adAud.volume=AD.v||1;
+ const p=adAud.play();
+ if(!p||!p.then)return;
+ p.then(()=>{adPlaying=true;$('astop').hidden=false;
   if('mediaSession' in navigator){try{navigator.mediaSession.metadata=new MediaMetadata({title:test?'تجربة الأذان':'أذان '+(AN[k]||''),artist:'وِرد',artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'}]})}catch(e){}}
- }catch(e){banner('اضغط أي مكان في الصفحة مرة واحدة ليُسمح بتشغيل الأذان تلقائيًا')}
+ }).catch(e=>{
+  const nm=e&&e.name;
+  if(nm==='NotSupportedError'&&list.length>1)return adStart(list.slice(1),test,k);
+  adPlaying=false;$('astop').hidden=true;
+  if(nm==='NotAllowedError')banner('اضغط أي مكان في الصفحة مرة واحدة ليُسمح بتشغيل الأذان تلقائيًا');
+  else if(nm==='NotSupportedError')banner('ملف الأذان غير موجود: ضع adhan.mp3 بجانب index.html ثم أعد المحاولة');
+  else banner('تعذّر تشغيل الأذان: '+(e&&e.message||nm||''));
+ });
 }
+function adPlay(k,test){adStart(k==='fajr'?['adhan-fajr.mp3','adhan.mp3']:['adhan.mp3'],test,k)}
 function adTick(){
  if(!AD.on||!AD.ok)return;
  if(!PT){if(!adTick._l||Date.now()-adTick._l>60000){adTick._l=Date.now();ptLoad()}return}
@@ -1578,6 +1587,7 @@ function adUI(){
  $('anote').textContent=(AD.on&&AD.ok)?'✅ مفعّل — سيُرفع الأذان عند دخول كل وقت ما دامت الصفحة مفتوحة (ويمكنك تركها في الخلفية). إغلاق الصفحة تمامًا أو إيقاف الهاتف للتطبيق يوقف الأذان، وعلى iPhone قد يتوقف في الخلفية.':'الأذان متوقف. عند التفعيل سنطلب موافقتك على تشغيل الصوت تلقائيًا وعلى الإشعارات.';
 }
 async function adEnable(){
+ try{adAud.src=silentWav();adAud.play().catch(()=>{})}catch(e){}   // فتح قفل الصوت داخل اللمسة
  if(!confirm('هل توافق على أن يشغّل الموقع صوت الأذان تلقائيًا عند دخول وقت الصلاة، حتى وهو في الخلفية على هاتفك؟\n\nيمكنك إيقافه في أي وقت من هذه الصفحة.')){AD.on=false;AD.ok=false;adSave();adUI();return}
  AD.ok=true;AD.on=true;adSave();
  if(nSup()&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(e){}}

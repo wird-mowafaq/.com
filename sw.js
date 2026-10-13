@@ -1,5 +1,5 @@
 /* وِرد — Service Worker: تثبيت التطبيق + عمل الواجهة دون اتصال + عرض الإشعارات */
-const V = 'wird-v5';
+const V = 'wird-v7';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
