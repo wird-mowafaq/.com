@@ -1157,6 +1157,23 @@ const PRE=['سُبْحَانَ اللَّهِ','الْحَمْدُ لِلَّه�
 const LS=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
 const SV=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let tab=LS('dh_tab','ts');
+/* قراءة الأذكار بصوت المتصفح (بلا تحميل ملفات): تعمل على الهاتف والحاسوب، وتتوقف عند عدم وجود صوت عربي */
+let AR_V=null;
+if('speechSynthesis' in window)speechSynthesis.onvoiceschanged=()=>{AR_V=null};
+function arVoice(){if(!('speechSynthesis' in window))return null;if(!AR_V){const vs=speechSynthesis.getVoices();AR_V=vs.find(v=>/^ar/i.test(v.lang))||null}return AR_V}
+function mkUtt(text){const u=new SpeechSynthesisUtterance(text);u.lang='ar-SA';u.rate=0.85;const v=arVoice();if(v)u.voice=v;return u}
+function speakAr(text){
+ if(!('speechSynthesis' in window)){toast('متصفحك لا يدعم قراءة الأذكار بالصوت');return}
+ speechSynthesis.cancel();
+ if(!arVoice())toast('لا يوجد صوت عربي مثبّت على جهازك، سيُقرأ بالصوت الافتراضي');
+ speechSynthesis.speak(mkUtt(text));
+}
+function speakList(texts){
+ if(!('speechSynthesis' in window)){toast('متصفحك لا يدعم قراءة الأذكار بالصوت');return}
+ speechSynthesis.cancel();
+ if(!arVoice())toast('لا يوجد صوت عربي مثبّت على جهازك، سيُقرأ بالصوت الافتراضي');
+ texts.forEach(t=>speechSynthesis.speak(mkUtt(t)));
+}
 function show(on){$('home').style.display=on?'none':'block';$('dhikr').style.display=on?'block':'none';scrollTo(0,0);if(on)render()}
 $('dhbtn').onclick=()=>{$('mushaf').style.display='none';$('wird').style.display='none';show(true)};
 $('dback').onclick=()=>show(false);
@@ -1169,6 +1186,7 @@ function render(){
  const T=TABS.find(x=>x.id===tab),day=LD(),key='dh_'+tab+'_'+day;
  let prog=LS(key,{});
  const note=document.createElement('p');note.className='ld';note.style.padding='4px 0 14px';note.textContent='المس البطاقة لتعدّ، ويُعاد العدّ كل يوم.';body.append(note);
+ const sa=document.createElement('button');sa.className='btn';sa.style.marginBottom='12px';sa.textContent='🔊 استمع إلى هذا القسم كله';sa.onclick=()=>speakList(T.d.map(x=>x.t));body.append(sa);
  T.d.forEach((d,i)=>{
   const left=Math.max(0,d.n-(prog[i]||0));
   const c=document.createElement('div');c.className='dz'+(left?'':' done');
@@ -1176,7 +1194,8 @@ function render(){
   const ft=document.createElement('div');ft.className='ft';
   const lb=document.createElement('span');lb.textContent=d.n>1?'التكرار: '+ar(d.n)+' مرة':'مرة واحدة';
   const cn=document.createElement('span');cn.className='cn';cn.textContent=left?ar(left):'✓';
-  ft.append(lb,cn);c.append(tx);if(d.s){const sr=document.createElement('div');sr.className='src';sr.textContent='📖 المصدر: '+d.s;c.append(sr)}c.append(ft);
+  const sp=document.createElement('button');sp.className='btn';sp.style.cssText='padding:2px 10px;font-size:.85rem';sp.textContent='🔊';sp.setAttribute('aria-label','استمع');sp.onclick=e=>{e.stopPropagation();speakAr(d.t)};
+  ft.append(lb,sp,cn);c.append(tx);if(d.s){const sr=document.createElement('div');sr.className='src';sr.textContent='📖 المصدر: '+d.s;c.append(sr)}c.append(ft);
   c.onclick=()=>{if(!left)return;prog[i]=(prog[i]||0)+1;SV(key,prog);if(navigator.vibrate)navigator.vibrate(15);const l=d.n-prog[i];cn.textContent=l?ar(l):'✓';if(!l)c.classList.add('done');if(T.d.every((x,j)=>(prog[j]||0)>=x.n)&&window.markAct)markAct(tab)};
   body.append(c);
  });
@@ -1206,7 +1225,8 @@ function tasbeeh(body){
   SV('dh_ts',st);paint();
  };
  rs.onclick=()=>{if(!(st.c[st.i]||0)||confirm('تصفير عدّاد هذا الذكر؟')){st.c[st.i]=0;SV('dh_ts',st);paint()}};
- box.append(pr,txt,btn,tg,tot,rs);body.append(box);paint();
+ const spk=document.createElement('button');spk.className='btn';spk.textContent='🔊 استمع إلى الذكر';spk.onclick=()=>speakAr(PRE[st.i]);
+ box.append(pr,txt,spk,btn,tg,tot,rs);body.append(box);paint();
 }
 })();
 
