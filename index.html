@@ -1623,13 +1623,16 @@ function adStop(){try{adAud.pause();adAud.currentTime=0}catch(e){dbg(e)}adPlayin
 adAud.onended=()=>{adPlaying=false;$('astop').hidden=true};
 /* التشغيل يبدأ فورًا داخل لمسة المستخدم (بلا await قبله)، وإلا يمنع المتصفح الصوت */
 function adStart(list,test,k){
+ const id=adStart._id=(adStart._id||0)+1;   // الطلب الأحدث وحده يُعتمد
+ try{adAud.pause()}catch(e){dbg(e)}
  adAud.src=list[0];adAud.volume=AD.v||1;
  const p=adAud.play();
  if(!p||!p.then)return;
- p.then(()=>{adPlaying=true;$('astop').hidden=false;
+ p.then(()=>{if(id!==adStart._id)return;adPlaying=true;$('astop').hidden=false;
   if('mediaSession' in navigator){try{navigator.mediaSession.metadata=new MediaMetadata({title:test?'تجربة الأذان':'أذان '+(AN[k]||''),artist:'وِرد',artwork:[{src:'icon-192.png',sizes:'192x192',type:'image/png'}]})}catch(e){dbg(e)}}
  }).catch(e=>{
   const nm=e&&e.name;
+  if(id!==adStart._id||nm==='AbortError')return;   // أُلغي بطلب أحدث: ليس خطأً
   if(nm==='NotSupportedError'&&list.length>1)return adStart(list.slice(1),test,k);
   adPlaying=false;$('astop').hidden=true;
   if(nm==='NotAllowedError')banner('اضغط أي مكان في الصفحة مرة واحدة ليُسمح بتشغيل الأذان تلقائيًا');
