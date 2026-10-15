@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>تنزيل التلاوات</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https:; base-uri 'self'; object-src 'none'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -87,6 +89,7 @@
 </div>
 
 <script>
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const API = 'https://www.mp3quran.net/api/v3';
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(3, '0');
@@ -97,8 +100,8 @@ let reciters = [], suwar = [], current = null;
 async function init(){
   try{
     const [r, s] = await Promise.all([
-      fetch(`${API}/reciters?language=ar`).then(x => x.json()),
-      fetch(`${API}/suwar?language=ar`).then(x => x.json())
+      fetch(`${API}/reciters?language=ar`, {signal: AbortSignal.timeout(20000)}).then(x => x.json()),
+      fetch(`${API}/suwar?language=ar`, {signal: AbortSignal.timeout(20000)}).then(x => x.json())
     ]);
     reciters = r.reciters || [];
     suwar = s.suwar || [];
@@ -119,7 +122,7 @@ function pickLuhaidan(){
 function fillReciters(term, keepId){
   const t = norm(term);
   const list = reciters.filter(r => !t || norm(r.name).includes(t));
-  $('reciter').innerHTML = list.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  $('reciter').innerHTML = list.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
   if(keepId) $('reciter').value = keepId;
   onReciter();
 }
@@ -127,7 +130,7 @@ function fillReciters(term, keepId){
 function onReciter(){
   const r = reciters.find(x => String(x.id) === $('reciter').value);
   if(!r){ $('moshaf').innerHTML = ''; $('list').innerHTML = '<div class="msg">لا توجد نتائج.</div>'; return; }
-  $('moshaf').innerHTML = r.moshaf.map((m, i) => `<option value="${i}">${m.name}</option>`).join('');
+  $('moshaf').innerHTML = r.moshaf.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join('');
   onMoshaf();
 }
 
@@ -143,10 +146,10 @@ function onMoshaf(){
 function renderList(){
   $('list').innerHTML = current.ids.map(id => {
     const s = suwar.find(x => x.id === id);
-    return `<div class="item" data-id="${id}">
+    return `<div class="item" data-id="${esc(id)}">
       <input type="checkbox" aria-label="تحديد السورة">
-      <span class="num">${id}</span>
-      <span class="name">${s ? s.name : 'سورة ' + id}</span>
+      <span class="num">${esc(id)}</span>
+      <span class="name">${s ? esc(s.name) : 'سورة ' + esc(id)}</span>
       <span class="st"></span>
       <button class="one">تنزيل</button>
     </div>`;

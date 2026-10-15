@@ -1,6 +1,6 @@
 /* وِرد — Service Worker: تثبيت التطبيق + عمل الواجهة دون اتصال + عرض الإشعارات */
-const V = 'wird-v8';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo.png', 'apple-touch-icon.png'];
+const V = 'wird-v9';
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo.png', 'apple-touch-icon.png', 'icon-maskable-512.png', '404.html', 'quran-downloader.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -22,8 +22,14 @@ self.addEventListener('fetch', e => {
   const r = e.request;
   if (r.method !== 'GET') return;
   const u = new URL(r.url);
+  // الخطوط: من الكاش إن وُجدت وإلا الشبكة ثم تخزَّن (تعمل دون اتصال بعد أول زيارة)
+  if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)) {
+    e.respondWith(caches.match(r).then(x => x || fetch(r).then(res => { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)).catch(() => {}); return res; })));
+    return;
+  }
   if (u.origin !== location.origin) return;            // الصوت وواجهات API من الشبكة دائمًا
-  if (u.pathname.includes('/videos/')) return;         // الفيديوهات الكبيرة لا تُخزَّن
+  if (u.pathname.includes('/videos/')) return;
+  if (r.headers.has('range')) return;                  // طلبات الصوت الجزئية (Range) من الشبكة مباشرة         // الفيديوهات الكبيرة لا تُخزَّن
   // الصفحة: الشبكة أولًا (لتصل التحديثات) ثم النسخة المخزَّنة دون اتصال
   if (r.mode === 'navigate' || u.pathname.endsWith('/') || u.pathname.endsWith('index.html')) {
     e.respondWith(
@@ -34,12 +40,15 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // بقية الملفات: المخزَّن أولًا
+  // بقية الملفات: المخزَّن أولًا مع تحديث في الخلفية (stale-while-revalidate) فلا تبقى أيقونة قديمة
   e.respondWith(
-    caches.match(r).then(x => x || fetch(r).then(res => {
-      if (res.status === 200) { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)).catch(() => {}); }
-      return res;
-    }))
+    caches.match(r).then(x => {
+      const net = fetch(r).then(res => {
+        if (res.status === 200) { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)).catch(() => {}); }
+        return res;
+      }).catch(() => x);
+      return x || net;
+    })
   );
 });
 

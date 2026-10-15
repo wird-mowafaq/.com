@@ -48,5 +48,7 @@ drop policy if exists o_add on storage.objects;drop policy if exists o_del on st
 create policy o_add on storage.objects for insert with check(bucket_id='backgrounds' and me_can('up'));
 create policy o_del on storage.objects for delete using(bucket_id='backgrounds' and (me_can('del') or exists(select 1 from public.backgrounds b where b.path=storage.objects.name and me_list(b.list_id))));
 -- ===== المالك =====
-insert into staff(email,name,role,up,del,stats) values('uea8da76e26f28f2949144de7@staff.nur','المالك','owner',true,true,true) on conflict (email) do update set role='owner',up=true,del=true,stats=true;
+-- المالك: أنشئ حساب المالك أولًا (Authentication ← Users ← Add user ببريد عشوائي وكلمة مرور طويلة)، ثم أدرج بريده هنا.
+-- لا تنشر بريد المالك في مستودع عام، ولا تشتقه من الكود.
+-- insert into staff(email,name,role,up,del,stats) values('OWNER_EMAIL_HERE','المالك','owner',true,true,true) on conflict (email) do update set role='owner',up=true,del=true,stats=true;
 update auth.users set email_confirmed_at=now() where email_confirmed_at is null and (email like '%@staff.nur' or email like '%@user.nur');
