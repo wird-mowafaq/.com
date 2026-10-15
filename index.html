@@ -1638,13 +1638,17 @@ function adStart(list,test,k){
  });
 }
 /* مؤذنون: [المفتاح، الاسم، كلمات للمطابقة مع اسم القارئ الحالي]. الملفات في مجلد adhan/ */
-const ADH=[['afasy','مشاري العفاسي',['عفاسي']],['qatami','ناصر القطامي',['قطامي']],['zahrani','منصور الزهراني',['زهراني']],['refaat','محمد رفعت',['رفعت']],['minshawi','محمد المنشاوي',['منشاوي']],['abdulbasit','عبد الباسط عبد الصمد',['عبد الباسط','عبدالباسط']],['naina','أحمد نعينع',['نعينع']],['makkah','أذان الحرم المكي',[]],['daghriri','حمد الدغريري',['دغريري']],['malki','حمدان المالكي',['حمدان المالكي']],['arkani','إبراهيم الأركاني',['اركاني']],['hamadhani','ماجد الهمذاني (Majed Al-hamathani)',['همذاني']],['suhaib','صهيب (Suhaib Khatba)',['صهيب']],['malek-fajr','مالك شبعة (Malek Chebae) — أذان الفجر',[]]];
+const ADH=[['afasy','مشاري العفاسي',['عفاسي']],['qatami','ناصر القطامي',['قطامي']],['zahrani','منصور الزهراني',['زهراني']],['refaat','محمد رفعت',['رفعت']],['minshawi','محمد المنشاوي',['منشاوي']],['abdulbasit','عبد الباسط عبد الصمد',['عبد الباسط','عبدالباسط']],['naina','أحمد نعينع',['نعينع']],['makkah','أذان الحرم المكي',[]],['daghriri','حمد الدغريري',['دغريري']],['malki','حمدان المالكي',['حمدان المالكي']],['arkani','إبراهيم الأركاني',['اركاني']],['hamadhani','ماجد الهمذاني (Majed Al-hamathani)',['همذاني']],['suhaib','صهيب (Suhaib Khatba)',['صهيب']],['malek-fajr','مالك شبعة (Malek Chebae) — أذان الفجر فقط',[]]];
 function adPick(){
  let m=AD.m||'def';
  if(m==='auto'){try{const n=norm(curR().name||'');const f=ADH.find(x=>x[2].some(w=>n.includes(norm(w))));m=f?f[0]:'def'}catch(e){dbg(e);m='def'}}
  return ADH.some(x=>x[0]===m)?m:'def';
 }
-function adList(k){const m=adPick(),base=k==='fajr'?['adhan-fajr.mp3','adhan.mp3']:['adhan.mp3'];return m==='def'?base:['adhan/'+m+'.mp3',...base]}
+const ADF=['malek-fajr'];   // أذانات خاصة بالفجر (فيها «الصلاة خير من النوم»): تُشغَّل في الفجر فقط
+function adList(k){
+ let m=adPick();const base=k==='fajr'?['adhan-fajr.mp3','adhan.mp3']:['adhan.mp3'];
+ if(ADF.includes(m)&&k!=='fajr')m='def';   // لا يُرفع أذان الفجر في الظهر والعصر...
+ return m==='def'?base:['adhan/'+m+'.mp3',...base]}
 function adPlay(k,test){adStart(adList(k),test,k)}
 function adTick(){
  if(!AD.on||!AD.ok)return;
@@ -1678,8 +1682,8 @@ async function adEnable(){
 }
 $('aon').onchange=()=>{if($('aon').checked)adEnable();else{AD.on=false;adSave();adKeepOff();adStop();adUI();banner('أُوقف الأذان')}};
 $('avol').oninput=()=>{AD.v=+$('avol').value;adSave();adAud.volume=AD.v};
-$('atest').onclick=()=>{adPlay('dhuhr',true)};
-$('amz').onchange=()=>{AD.m=$('amz').value;adSave();adPlay('dhuhr',true)};
+$('atest').onclick=()=>{adPlay(ADF.includes(adPick())?'fajr':'dhuhr',true)};
+$('amz').onchange=()=>{AD.m=$('amz').value;adSave();adPlay(ADF.includes(adPick())?'fajr':'dhuhr',true)};
 $('astop').onclick=()=>adStop();
 addEventListener('pointerdown',()=>{if(AD.on&&AD.ok&&(!adKeep||adKeep.paused))adKeepOn()},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)adTick()});
