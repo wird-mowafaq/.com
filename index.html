@@ -178,6 +178,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
    <div id="rstat"></div>
   </div>
   <input id="q" placeholder="ابحث عن سورة…" aria-label="بحث">
+  <button id="ayq" class="btn" type="button">🔎 ابحث في الآيات</button>
  </div>
  <div id="list" class="grid"></div>
  <p id="msg" hidden></p>
@@ -1957,7 +1958,7 @@ async function cInfo(){
  row('📖 عدد الآيات: '+ar(n)+' — ⏱ مدة التلاوة التقريبية: '+dur(aud));
  row('🎬 الفيديو: '+dur(vid)+' — '+ar(Z.W)+'×'+ar(Z.H)+' — الحجم التقريبي ≈ '+ar(mb.toFixed(1))+' ميغابايت');
  row('الأرقام تقديرية حسب سرعة القارئ، والمدة الفعلية تظهر بعد إنشاء الفيديو.');
- if(n>20)row('⚠ الفيديو يقبل حتى ٢٠ آية في المرة، أما MP3 فبلا حد.',1);
+ if(n>20&&!isOwner())row('⚠ الفيديو يقبل حتى ٢٠ آية في المرة، أما MP3 فبلا حد.',1);
  if(c.r.t==='s')row('ℹ هذا القارئ تلاوته ملف سورة كاملة: يُقسَّم الفيديو إلى آيات تقريبيًا (قد يتقدم الانتقال أو يتأخر قليلًا)، وزر «تنزيل MP3» ينزّل السورة كاملة.');
 }
 ['crec','csur','cfrom','cto','csz','cq'].forEach(i=>$(i).addEventListener('change',cInfo));['cfrom','cto'].forEach(i=>$(i).addEventListener('input',cInfo));
@@ -2013,7 +2014,7 @@ $('cdlv').onclick=async()=>{
  const rtOK=!!(window.MediaRecorder&&HTMLCanvasElement.prototype.captureStream);
  if(!fastOK&&!rtOK)return st.textContent='متصفحك لا يدعم إنشاء الفيديو. استخدم Chrome أو Edge أو Firefox حديثًا.';
  const c=cSel();if(!c.r)return;
- const n=c.b-c.a+1;if(n>20)return st.textContent='للفيديو: حتى ٢٠ آية في المرة الواحدة.';
+ const n=c.b-c.a+1;if(n>20&&!isOwner())return st.textContent='للفيديو: حتى ٢٠ آية في المرة الواحدة.';
  btn.disabled=true;$('cdlc').hidden=false;vcancel=false;
  let AC=null,v=null,timer=null,stream=null,blob=null,ext='mp4',bgUrl=null,fastUsed=false;const T0p=performance.now();
  try{
@@ -2184,5 +2185,8 @@ addEventListener('beforeinstallprompt',e=>{
 });
 addEventListener('appinstalled',()=>{const b=document.getElementById('inst');if(b)b.remove()});
 </script>
+<script>window.wirdIsOwner=function(){try{return isOwner()}catch(e){return false}};</script>
+<script src="wird-search.js" defer></script>
+<script>document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('ayq');if(b)b.onclick=function(){if(window.WirdSearch)WirdSearch.open()}});</script>
 </body>
 </html>

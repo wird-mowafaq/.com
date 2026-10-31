@@ -22,8 +22,9 @@
     FREE_LIMIT: 20,          // حد الزائر العادي
     CONCURRENCY: 6,          // عدد الاتصالات المتوازية
     PAGE: 50,                // عدد النتائج في كل دفعة
-    TEXT_URL: 'https://api.alquran.cloud/v1/quran/quran-uthmani',
-    DB: 'wird-search', STORE: 'kv', KEY: 'quran-uthmani-v1',
+    TEXT_URL: 'https://api.alquran.cloud/v1/quran/quran-uthmani',   // للعرض
+    SIMPLE_URL: 'https://api.alquran.cloud/v1/quran/quran-simple',  // للبحث (إملاء عادي)
+    DB: 'wird-search', STORE: 'kv', KEY: 'quran-v2',
     // أضِف أي قارئ هنا: url يستقبل الآية {g: الرقم العام 1..6236, s: السورة, n: رقم الآية}
     READERS: [
       { id: 'alafasy',   name: 'مشاري العفاسي',        url: function (a) { return 'https://cdn.islamic.network/quran/audio/128/ar.alafasy/' + a.g + '.mp3'; } },
@@ -59,11 +60,11 @@
   }
 
   // يعيد النص المطبَّع مع خريطة من موضع كل حرف مطبَّع إلى موضعه في الأصل
-  function normMap(text) {
+  function normMap(text, loose) {
     var n = '', map = [], lastSpace = true;
     for (var i = 0; i < text.length; i++) {
       var c = mapChar(text[i]);
-      if (c === '') continue;
+      if (c === '' || (loose && c === 'ا')) continue;
       if (/\s/.test(c)) { if (lastSpace) continue; c = ' '; lastSpace = true; } else { lastSpace = false; }
       n += c; map.push(i);
     }
@@ -75,15 +76,24 @@
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   function highlight(text, tokens) {
-    var nm = normMap(text), ranges = [], i;
-    tokens.forEach(function (t) {
-      if (!t) return;
-      var p = 0;
-      while ((p = nm.n.indexOf(t, p)) !== -1) {
-        var s = nm.map[p], e = nm.map[p + t.length - 1] + 1;
+    var nm = normMap(text), nl = null, ranges = [], i;
+    function scan(m, t, isLoose) {
+      var p = 0, found = false;
+      if (!t) return false;
+      while ((p = m.n.indexOf(t, p)) !== -1) {
+        var s = m.map[p], e = m.map[p + t.length - 1] + 1;
+        if (isLoose) while (s > 0 && /[اٱأإآ]/.test(text[s - 1])) s--;
         while (e < text.length && STRIP.test(text[e])) e++;
-        ranges.push([s, e]); p += t.length;
+        ranges.push([s, e]); p += t.length; found = true;
       }
+      return found;
+    }
+    tokens.forEach(function (t) {
+      if (scan(nm, t)) return;
+      var lt = t.replace(/ا/g, '');          // الرسم العثماني يحذف الألف أحيانًا
+      if (lt.length < 2) return;
+      if (!nl) nl = normMap(text, true);
+      scan(nl, lt, true);
     });
     if (!ranges.length) return esc(text);
     ranges.sort(function (a, b) { return a[0] - b[0]; });
@@ -106,37 +116,46 @@
       r.onerror = function () { rej(r.error); };
     });
   }
+  function withTimeout(p, ms, fallback) {
+    return new Promise(function (res) {
+      var done = false, t = setTimeout(function () { if (!done) { done = true; res(fallback); } }, ms);
+      p.then(function (v) { if (!done) { done = true; clearTimeout(t); res(v); } },
+             function () { if (!done) { done = true; clearTimeout(t); res(fallback); } });
+    });
+  }
   function idbGet(k) {
-    return idb().then(function (db) {
+    return withTimeout(idb().then(function (db) {
       return new Promise(function (res, rej) {
         var q = db.transaction(CFG.STORE).objectStore(CFG.STORE).get(k);
         q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); };
       });
-    }).catch(function () { return null; });
+    }), 1500, null);
   }
   function idbSet(k, v) {
-    return idb().then(function (db) {
+    return withTimeout(idb().then(function (db) {
       return new Promise(function (res, rej) {
         var tx = db.transaction(CFG.STORE, 'readwrite'); tx.objectStore(CFG.STORE).put(v, k);
         tx.oncomplete = res; tx.onerror = function () { rej(tx.error); };
       });
-    }).catch(function () {});
+    }), 4000, null);
   }
 
   /* ===================== تحميل نص المصحف ===================== */
   var Q = null, loading = null;
+
+  function stripBasmala(t) {
+    var w = t.split(/\s+/);
+    return norm(w.slice(0, 4).join(' ')) === 'بسم الله الرحمن الرحيم' ? w.slice(4).join(' ') : t;
+  }
 
   function build(raw) {
     var ayahs = [], surahs = [];
     raw.forEach(function (s) {
       var start = ayahs.length;
       s.a.forEach(function (y) {
-        var g = y[0], n = y[1], text = y[2];
-        if (n === 1 && s.n !== 1 && s.n !== 9) {            // حذف البسملة الملتصقة بالآية الأولى
-          var w = text.split(/\s+/);
-          if (norm(w.slice(0, 4).join(' ')) === 'بسم الله الرحمن الرحيم') text = w.slice(4).join(' ');
-        }
-        ayahs.push({ g: g, s: s.n, n: n, text: text, norm: norm(text) });
+        var g = y[0], n = y[1], text = y[2], simple = y[3] || y[2];
+        if (n === 1 && s.n !== 1 && s.n !== 9) { text = stripBasmala(text); simple = stripBasmala(simple); }  // البسملة الملتصقة بالآية الأولى
+        ayahs.push({ g: g, s: s.n, n: n, text: text, norm: norm(simple) });
       });
       surahs.push({ n: s.n, name: s.name, key: norm(s.name).replace(/^سوره\s+/, ''), start: start, count: s.a.length });
     });
@@ -148,14 +167,17 @@
     if (loading) return loading;
     loading = idbGet(CFG.KEY).then(function (raw) {
       if (raw) return raw;
-      return fetch(CFG.TEXT_URL).then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      }).then(function (j) {
-        var raw = j.data.surahs.map(function (s) {
-          return { n: s.number, name: s.name, a: s.ayahs.map(function (y) { return [y.number, y.numberInSurah, y.text]; }) };
+      function getJson(u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }
+      return Promise.all([getJson(CFG.TEXT_URL), getJson(CFG.SIMPLE_URL).catch(function () { return null; })]).then(function (r) {
+        var u = r[0], sm = r[1];
+        var raw = u.data.surahs.map(function (s, i) {
+          var ss = sm && sm.data.surahs[i];
+          return { n: s.number, name: s.name, a: s.ayahs.map(function (y, k) {
+            return [y.number, y.numberInSurah, y.text, (ss && ss.ayahs[k]) ? ss.ayahs[k].text : y.text];
+          }) };
         });
-        return idbSet(CFG.KEY, raw).then(function () { return raw; });
+        idbSet(CFG.KEY, raw);   // حفظ في الخلفية دون انتظار
+        return raw;
       });
     }).then(function (raw) { Q = build(raw); return Q; }).catch(function (e) { loading = null; throw e; });
     return loading;
