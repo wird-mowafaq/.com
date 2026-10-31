@@ -1682,16 +1682,20 @@ async function adEnable(){
  if(!confirm('هل توافق على أن يشغّل الموقع صوت الأذان تلقائيًا عند دخول وقت الصلاة، حتى وهو في الخلفية على هاتفك؟\n\nيمكنك إيقافه في أي وقت من هذه الصفحة.')){AD.on=false;AD.ok=false;adSave();adUI();return}
  AD.ok=true;AD.on=true;adSave();
  if(nSup()&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(e){dbg(e)}}
- adKeepOn();adUI();ptLoad();banner('تم تفعيل الأذان');
+ adKeepOn();adUI();ptLoad();adCacheSel();banner('تم تفعيل الأذان');
 }
+/* حفظ الأذان على الجهاز ليعمل دون إنترنت: الافتراضي + الفجر + المؤذن المختار */
+async function adCacheSel(){try{if(!('caches' in window))return;const c=await caches.open('wird-adhan');const m=adPick();
+ const urls=['adhan.mp3','adhan-fajr.mp3'];if(m!=='def'){urls.push('adhan-'+m+'.mp3','adhan/'+m+'.mp3')}
+ for(const u of urls){if(await c.match(u))continue;try{const r=await fetch(u);if(r.ok&&r.status===200)await c.put(u,r)}catch(e){dbg(e)}}}catch(e){dbg(e)}}
 $('aon').onchange=()=>{if($('aon').checked)adEnable();else{AD.on=false;adSave();adKeepOff();adStop();adUI();banner('أُوقف الأذان')}};
 $('avol').oninput=()=>{AD.v=+$('avol').value;adSave();adAud.volume=AD.v};
 $('atest').onclick=()=>{adPlay(ADF.includes(adPick())?'fajr':'dhuhr',true)};
-$('amz').onchange=()=>{AD.m=$('amz').value;adSave();adPlay(ADF.includes(adPick())?'fajr':'dhuhr',true)};
+$('amz').onchange=()=>{AD.m=$('amz').value;adSave();adCacheSel();adPlay(ADF.includes(adPick())?'fajr':'dhuhr',true)};
 $('astop').onclick=()=>adStop();
 addEventListener('pointerdown',()=>{if(AD.on&&AD.ok&&(!adKeep||adKeep.paused))adKeepOn()},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)adTick()});
-setInterval(adTick,1000);adUI();if(AD.on&&AD.ok)setTimeout(ptLoad,2500);
+setInterval(adTick,1000);adUI();if(AD.on&&AD.ok){setTimeout(ptLoad,2500);setTimeout(adCacheSel,4000)}
 
 /* ===== أذكار بصوت مقروء (بث من archive.org، لا تُخزَّن في الموقع) ===== */
 const ZURL=n=>'https://archive.org/download/makkah-live.-net-athkar-01/MakkahLive.Net_athkar_'+String(n).padStart(2,'0')+'.mp3';
