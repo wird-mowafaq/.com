@@ -1637,7 +1637,7 @@ function adStart(list,test,k){
   if(nm==='NotSupportedError'&&list.length>1)return adStart(list.slice(1),test,k);
   adPlaying=false;$('astop').hidden=true;
   if(nm==='NotAllowedError')banner('اضغط أي مكان في الصفحة مرة واحدة ليُسمح بتشغيل الأذان تلقائيًا');
-  else if(nm==='NotSupportedError')banner('ملف الأذان غير موجود: تأكد من رفع مجلد adhan وملف adhan.mp3 بجانب index.html');
+  else if(nm==='NotSupportedError')banner('ملف الأذان غير موجود: ارفع ملفات المؤذنين (adhan-اسم.mp3) وملف adhan.mp3 بجانب index.html');
   else banner('تعذّر تشغيل الأذان: '+(e&&e.message||nm||''));
  });
 }
@@ -1652,7 +1652,7 @@ const ADF=['malek-fajr'];   // أذانات خاصة بالفجر (فيها «ا
 function adList(k){
  let m=adPick();const base=k==='fajr'?['adhan-fajr.mp3','adhan.mp3']:['adhan.mp3'];
  if(ADF.includes(m)&&k!=='fajr')m='def';   // لا يُرفع أذان الفجر في الظهر والعصر...
- return m==='def'?base:['adhan/'+m+'.mp3',...base]}
+ return m==='def'?base:['adhan/'+m+'.mp3','adhan-'+m+'.mp3',...base]}
 function adPlay(k,test){adStart(adList(k),test,k)}
 function adTick(){
  if(!AD.on||!AD.ok)return;
