@@ -65,6 +65,13 @@ main{max-width:900px;margin:auto;padding:0 20px 70px}
 #rlist .none,#rlist .more{color:var(--mist);cursor:default;text-align:center;font-size:.9rem}
 #rstat{color:var(--mist);font-size:.85rem;margin-top:4px}
 .bar{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 16px}
+#vres{margin:6px 0 18px}#vres h3{font-size:1rem;margin:0 0 10px;color:var(--gold)}
+.vit{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:8px;cursor:pointer}
+.vit:hover{border-color:var(--gold)}.vit small{display:block;color:var(--gold);margin-bottom:4px}.vit .t{line-height:2.1;font-size:1.12rem}
+.vit mark,.csr mark{background:rgba(212,170,85,.35);color:inherit;border-radius:3px}
+.vmore{display:block;margin:10px auto}
+#csqr{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:4px 0 10px;max-height:46vh;overflow:auto}
+.csr{padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;line-height:1.9}.csr:last-child{border-bottom:0}.csr:hover{background:rgba(212,170,85,.18)}.csr small{display:block;color:var(--gold)}.csr.info{cursor:default;color:var(--mist);text-align:center}
 select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
 .btn{cursor:pointer;text-align:center}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
@@ -177,10 +184,10 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
    <div id="rlist" role="listbox" hidden></div>
    <div id="rstat"></div>
   </div>
-  <input id="q" placeholder="ابحث عن سورة…" aria-label="بحث">
-  <button id="ayq" class="btn" type="button">🔎 ابحث في الآيات</button>
+  <input id="q" placeholder="ابحث عن سورة أو آية… (الإخلاص، الله الصمد، 2:255)" aria-label="بحث في السور والآيات">
  </div>
  <div id="list" class="grid"></div>
+ <div id="vres" hidden></div>
  <p id="msg" hidden></p>
 </main>
 
@@ -199,10 +206,12 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
 </main>
 
 <main id="clip"><div class="wbox"><h3>✂ اختر مقطعًا من آية إلى آية</h3>
+ <input id="csq" type="search" autocomplete="off" placeholder="🔎 ابحث باسم السورة أو بجزء آية لاختيار المقطع…" aria-label="بحث داخل التنزيل"><div id="csqr" hidden></div>
+ <input id="crq" type="search" autocomplete="off" placeholder="🎙 ابحث عن قارئ للتنزيل…" aria-label="بحث عن قارئ للتنزيل">
  <select id="crec" aria-label="القارئ"></select><select id="csur" aria-label="السورة"></select>
  <div class="bar" style="margin:0 0 8px"><input id="cfrom" aria-label="من آية" type="number" min="1" value="1" placeholder="من آية"><input id="cto" aria-label="إلى آية" type="number" min="1" value="7" placeholder="إلى آية"></div>
  <div id="cinfo" style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 10px;line-height:2;font-size:.95rem"></div>
- <button id="clisten" class="btn">▶ استماع بملء الشاشة</button><button id="cdl" class="btn" style="margin-top:8px">⬇ تنزيل MP3</button>
+ <button id="clisten" class="btn">▶ استماع بملء الشاشة</button><button id="cdl" class="btn" style="margin-top:8px">⬇ تنزيل MP3</button><button id="cmp3all" class="btn" style="margin-top:8px">📥 تنزيل MP3 لأي مقطع أو المصحف كله</button>
  <div class="ld" style="padding:12px 0 4px">🎬 تنزيل فيديو: اختر القائمة والخلفية</div>
  <select id="cbl" aria-label="قائمة الخلفيات"></select><select id="cbv" aria-label="الخلفية"></select>
  <select id="csz" aria-label="قياس الفيديو"><option value="v">📱 عمودي 9:16 — ريلز وتيك توك وشورتس</option><option value="s">⬛ مربع 1:1 — إنستغرام</option><option value="h">🖥 أفقي 16:9 — يوتيوب</option></select>
@@ -465,7 +474,7 @@ async function loadMoreReciters(){
    if(RECITERS.some(x=>sUrl(x.src)===srv))return;
    RECITERS.push({t:'s',name:rc.name+' — '+m.name,src:srv,list:set.join(','),n:set.length});
   }));
-  moreState='';fillReciters();if(window.renderFD)renderFD();
+  moreState='';fillReciters();if(window.renderFD)renderFD();if(window.fillClipReciters&&$('crec')&&$('crec').options.length)fillClipReciters();
  }catch(e){moreState='تعذّر تحميل بقية القراء (القائمة الأساسية تعمل)';fillReciters()}
 }
 async function init(){
@@ -481,7 +490,31 @@ function draw(){
   b.onclick=()=>openMushaf(s);$('list').append(b);
  });
 }
-$('q').oninput=draw;
+$('q').oninput=()=>{draw();vsearch()};
+/* البحث في الآيات داخل خانة السور نفسها: اكتب «الإخلاص» فتظهر السورة، أو «الله الصمد» فتظهر الآية، وبالنقر تفتح الآية في المصحف */
+let vtok=0,vtimer=null,vlist=[],vtoks=[],vshown=0;
+const vsearch=()=>{clearTimeout(vtimer);vtimer=setTimeout(vrun,220)};
+async function vrun(){
+ const t=$('q').value.trim(),box=$('vres'),my=++vtok;
+ if(t.length<2||/^\d+$/.test(t)||!window.WirdSearch){box.hidden=true;box.textContent='';return}
+ box.hidden=false;if(!WirdSearch.loaded())box.textContent='جارٍ تجهيز البحث في الآيات (مرة واحدة فقط)…';
+ try{await WirdSearch.ready()}catch(e){if(my===vtok)box.textContent='تعذّر تحميل نص المصحف للبحث في الآيات. تحقق من الإنترنت.';return}
+ if(my!==vtok)return;
+ const r=WirdSearch.search(t);vlist=r.list;vtoks=r.tokens;vshown=0;box.textContent='';
+ if(!vlist.length){if($('list').children.length)box.hidden=true;else box.textContent='لا توجد سور أو آيات مطابقة.';return}
+ const h=document.createElement('h3');h.textContent='📖 الآيات المطابقة ('+ar(vlist.length)+')';box.append(h);vmore();
+}
+function vmore(){
+ const box=$('vres'),old=box.querySelector('.vmore');if(old)old.remove();
+ const end=Math.min(vlist.length,vshown+30);
+ for(let i=vshown;i<end;i++){const a=vlist[i],d=document.createElement('div');d.className='vit';
+  const sm=document.createElement('small');sm.textContent=WirdSearch.surahName(a.s)+' — آية '+ar(a.n);
+  const tx=document.createElement('div');tx.className='t';tx.innerHTML=WirdSearch.highlight(a.text,vtoks)+' ﴿'+ar(a.n)+'﴾';
+  d.append(sm,tx);d.onclick=()=>openAyah(a.s,a.n);box.append(d)}
+ vshown=end;
+ if(vshown<vlist.length){const b=document.createElement('button');b.className='btn vmore';b.textContent='عرض المزيد ('+ar(vlist.length-vshown)+')';b.onclick=vmore;box.append(b)}
+}
+async function openAyah(sn,an){const s=surahs[sn-1];if(!s)return;await openMushaf(s);const k=words.findIndex(w=>+w.dataset.a===an-1&&+w.dataset.s===sn);if(k>=0)setWord(k,true)}
 
 async function loadAyahs(s){
  const d=(await (await fetch(`https://api.alquran.cloud/v1/surah/${s.number}/quran-uthmani`)).json()).data.ayahs;
@@ -1753,10 +1786,18 @@ function renderMe(){
 $('gbtn2').onclick=()=>$('gbtn').onclick();
 function renderClip(){
  renderFD();
- const rs=$('crec');if(!rs.options.length)RECITERS.filter(r=>r.t==='a'||r.src.includes('/lhdan/')).forEach(r=>rs.add(new Option(r.name,key(r))));
+ const rs=$('crec');if(!rs.options.length)fillClipReciters();
  if(!rs.value)rs.selectedIndex=0;const ss=$('csur');if(!ss.options.length&&surahs.length)surahs.forEach(x=>ss.add(new Option(x.number+'. '+x.name,x.number)));
  $('cnote').textContent=(DL_NEEDS_ACCOUNT&&!usr)?'🔒 التنزيل يتطلب حسابًا: اضغط «تسجيل الدخول» من صفحة «نشاطي» (الاستماع متاح للجميع).':'';cInfo();
 }
+/* كل القرّاء متاحون للتنزيل (آية بآية أو سورة كاملة) مع بحث بالاسم */
+function fillClipReciters(){
+ const rs=$('crec');if(!rs)return;const ws=norm(($('crq')&&$('crq').value)||'').split(/\s+/).filter(Boolean),cur=rs.value;rs.innerHTML='';
+ RECITERS.forEach(r=>{const label=r.name+(r.t==='s'&&r.list&&r.n<114?' — '+ar(r.n)+' سورة':'');const nl=norm(label);if(ws.every(w=>nl.includes(w)))rs.add(new Option(label,key(r)))});
+ if([...rs.options].some(o=>o.value===cur))rs.value=cur;else if(rs.options.length)rs.selectedIndex=0;
+ rs.dispatchEvent(new Event('change'));
+}
+$('crq').oninput=fillClipReciters;
 const cSel=()=>{const x=surahs[$('csur').value-1],a=Math.max(1,+$('cfrom').value||1),b=Math.min(x.numberOfAyahs,+$('cto').value||a);return{s:x,a:Math.min(a,x.numberOfAyahs),b:Math.max(Math.min(a,x.numberOfAyahs),b),r:RECITERS.find(y=>key(y)===$('crec').value)}};
 $('clisten').onclick=async()=>{const c=cSel();if(!c.r)return;saved=key(c.r);localStorage.setItem('reciter',saved);fillReciters();surah=c.s;ayahs=await loadAyahs(c.s);openReader(c.a===1?-1:c.a-1,{s:c.s.number,a:c.b})};
 $('cdl').onclick=async()=>{
@@ -1888,7 +1929,7 @@ async function renderSug(){
  if(!isOwner())return;
  const b=$('slist');b.textContent='جارٍ التحميل…';
  try{
-  const L=await api('/rest/v1/suggestions?select=id,who,body,created&order=id.desc&limit=200');
+  const L=await sgLoad();
   const seen=WL('sgseen2',[]);b.innerHTML='';
   const L2=L.filter(x=>!seen.includes(x.id));
   if(!L2.length)b.innerHTML='<p class="ld">لا توجد اقتراحات جديدة.</p>';
@@ -1898,14 +1939,37 @@ async function renderSug(){
    d.append(h,t,mkbtn('تمت القراءة ✓',0,()=>{seen.push(x.id);try{localStorage.setItem('sgseen2',JSON.stringify(seen.slice(-500)))}catch(e){dbg(e)}renderSug()}));b.append(d)});
  }catch(e){b.textContent='تعذّر التحميل: '+e.message}
 }
+/* إرسال الاقتراح: الجدول suggestions أولًا، وإن لم يكن موجودًا أو رفض الإدخال نحفظه في جدول events الموجود (لا يحتاج أي تعديل في قاعدة البيانات).
+   صفوف events تبدأ بـ «§sug:» فتُستثنى من الإحصاءات تلقائيًا. الاقتراح الطويل يُقسَّم لقطع ≤180 حرفًا ويُجمع عند القراءة. */
+async function sgPost(table,rows){
+ const r=await fetch(SB_URL+'/rest/v1/'+table,{method:'POST',headers:{apikey:SB.key,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(rows)});
+ if(!r.ok){let t='';try{t=await r.text()}catch(e){dbg(e)}const er=new Error((t||'').slice(0,160)||String(r.status));er.status=r.status;throw er}
+}
+const sgWhy=e=>!e||e.name==='TypeError'?'تحقق من الاتصال بالإنترنت':e.status===429||/rate limit/i.test(e.message)?'كثرة الطلبات، حاول بعد دقيقة':'('+(e.status||'؟')+') '+String(e.message||'').slice(0,100);
+async function sgLoad(){
+ const out=[];let bad=0,last=null;
+ try{(await api('/rest/v1/suggestions?select=id,who,body,created&order=id.desc&limit=200')).forEach(x=>out.push({id:x.id,who:x.who,body:x.body,created:x.created}))}catch(e){bad++;last=e;dbg(e)}
+ try{const R=await api('/rest/v1/events?select=id,reciter,surah,who,created&reciter=like.'+encodeURIComponent(SGK+':')+'*&order=id.asc&limit=3000'),g={};
+  R.forEach(x=>{(g[x.reciter]=g[x.reciter]||{id:'e'+x.reciter,who:x.who,created:x.created,parts:[]}).parts.push(x.surah||'')});
+  Object.values(g).forEach(x=>out.push({id:x.id,who:x.who,body:x.parts.join(''),created:x.created}))}catch(e){bad++;last=e;dbg(e)}
+ if(bad===2)throw last;
+ out.sort((a,b)=>String(b.created).localeCompare(String(a.created)));return out;
+}
 $('ssend').onclick=async()=>{
  const body=$('sbody').value.trim(),st=$('sst');
  if(body.length<2)return st.textContent='اكتب اقتراحك أولًا';
  if(Date.now()-(+localStorage.getItem('sgt')||0)<30000)return st.textContent='انتظر نصف دقيقة قبل إرسال اقتراح آخر';
  st.textContent='جارٍ الإرسال…';
- try{const r=await fetch(SB_URL+'/rest/v1/suggestions',{method:'POST',headers:{apikey:SB.key,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({body:body.slice(0,1000),who:(whoName()||'').slice(0,60)||null})});
-  if(!r.ok)throw 0;$('sbody').value='';try{localStorage.setItem('sgt',Date.now())}catch(e){dbg(e)}st.textContent='وصل اقتراحك، جزاك الله خيرًا 🤍'}
- catch(e){st.textContent='تعذّر الإرسال، تحقق من الاتصال وحاول مرة أخرى'}
+ const txt=body.slice(0,1000),who=(whoName()||'').slice(0,60)||null;
+ try{
+  try{await sgPost('suggestions',{body:txt,who})}
+  catch(e1){
+   dbg(e1);
+   const key=SGK+':'+Date.now().toString(36),parts=txt.match(/[\s\S]{1,180}/g)||[txt];
+   await sgPost('events',parts.map((p,i)=>({kind:'visit',reciter:key,surah:p,dev:(i+1)+'/'+parts.length,who})));
+  }
+  $('sbody').value='';try{localStorage.setItem('sgt',Date.now())}catch(e){dbg(e)}st.textContent='وصل اقتراحك، جزاك الله خيرًا 🤍';
+ }catch(e){st.textContent='تعذّر الإرسال: '+sgWhy(e)}
 };
 /* حسابات المالك (القائمة الجانبية): ملف meta/links.json في مخزن الموقع */
 const ICON=u=>/instagram/i.test(u)?'📸':/youtu/i.test(u)?'▶️':/tiktok/i.test(u)?'🎵':/twitter|x\.com/i.test(u)?'🐦':/t\.me|telegram/i.test(u)?'✈️':/wa\.me|whatsapp/i.test(u)?'💬':/facebook|fb\.com/i.test(u)?'📘':/snapchat/i.test(u)?'👻':'🔗';
@@ -1939,7 +2003,7 @@ function fitText(x,text,mw,mh,font,K=1){const hi=Math.round(60*K),lo=Math.round(
 }
 let vcancel=false;
 $('cdlc').onclick=()=>{vcancel=true};
-const tick0=()=>new Promise(r=>setTimeout(r,0));
+const tick0=(()=>{const mc=new MessageChannel();let q=[];mc.port1.onmessage=()=>{const f=q;q=[];f.forEach(r=>r())};return()=>new Promise(r=>{q.push(r);mc.port2.postMessage(0)})})();   // تسليم سريع للمتصفح بلا تأخير setTimeout
 const seekTo=(v,t)=>new Promise(ok=>{let d=false;const f=()=>{if(d)return;d=true;v.removeEventListener('seeked',f);ok()};v.addEventListener('seeked',f);v.currentTime=t;setTimeout(f,2000)});
 const waitLoad=(v,ms)=>new Promise(ok=>{let d=false;const f=r=>{if(d)return;d=true;ok(r)};v.onloadeddata=()=>f(true);v.onerror=()=>f(false);setTimeout(()=>f(false),ms)});
 
@@ -1964,7 +2028,30 @@ async function cInfo(){
  row('الأرقام تقديرية حسب سرعة القارئ، والمدة الفعلية تظهر بعد إنشاء الفيديو.');
  if(n>20&&!isOwner())row('⚠ الفيديو يقبل حتى ٢٠ آية في المرة، أما MP3 فبلا حد.',1);
  if(c.r.t==='s')row('ℹ هذا القارئ تلاوته ملف سورة كاملة: يُقسَّم الفيديو إلى آيات تقريبيًا (قد يتقدم الانتقال أو يتأخر قليلًا)، وزر «تنزيل MP3» ينزّل السورة كاملة.');
+ if(c.r.t==='s'&&!hasS(c.r,c.s.number))row('⚠ هذه السورة غير متوفرة لهذا القارئ، اختر قارئًا آخر.',1);
 }
+/* بحث داخل التنزيل: اسم سورة أو جزء آية ← يضبط السورة والآيات تلقائيًا */
+(()=>{
+ const inp=$('csq'),box=$('csqr');let tm=null,tk=0;
+ const pick=(sn,a,b)=>{$('csur').value=sn;$('cfrom').value=a;$('cto').value=b;box.hidden=true;box.textContent='';inp.value='';$('csur').dispatchEvent(new Event('change'));$('cfrom').dispatchEvent(new Event('input'))};
+ const add=(el,fn)=>{el.className='csr'+(fn?'':' info');if(fn)el.onclick=fn;box.append(el)};
+ inp.oninput=()=>{clearTimeout(tm);tm=setTimeout(go,200)};
+ async function go(){
+  const t=inp.value.trim(),my=++tk;box.textContent='';
+  if(!t){box.hidden=true;return}
+  box.hidden=false;const nt=norm(t);let any=false;
+  (surahs||[]).filter(s=>norm(s.name).includes(nt)||String(s.number)===t).slice(0,6).forEach(s=>{any=true;const d=document.createElement('div');d.textContent='📖 '+s.name+' — السورة كاملة ('+ar(s.numberOfAyahs)+' آية)';add(d,()=>pick(s.number,1,s.numberOfAyahs))});
+  if(t.length>=2&&!/^\d+$/.test(t)&&window.WirdSearch){
+   let ld=null;if(!WirdSearch.loaded()){ld=document.createElement('div');ld.textContent='جارٍ تجهيز البحث في الآيات…';add(ld,null)}
+   try{await WirdSearch.ready()}catch(e){if(my===tk){box.textContent='';const d=document.createElement('div');d.textContent='تعذّر تحميل نص المصحف للبحث في الآيات.';add(d,null)}return}
+   if(my!==tk)return;if(ld)ld.remove();
+   const r=WirdSearch.search(t);
+   r.list.slice(0,12).forEach(a=>{any=true;const d=document.createElement('div'),sm=document.createElement('small'),tx=document.createElement('div');sm.textContent=WirdSearch.surahName(a.s)+' — آية '+ar(a.n);tx.innerHTML=WirdSearch.highlight(a.text,r.tokens);d.append(sm,tx);add(d,()=>pick(a.s,a.n,a.n))});
+   if(r.list.length>12){const d=document.createElement('div');d.textContent='وهناك '+ar(r.list.length-12)+' نتيجة أخرى — دقّق البحث';add(d,null)}
+  }
+  if(!any){const d=document.createElement('div');d.textContent='لا توجد نتائج';add(d,null)}
+ }
+})();
 ['crec','csur','cfrom','cto','csz','cq'].forEach(i=>$(i).addEventListener('change',cInfo));['cfrom','cto'].forEach(i=>$(i).addEventListener('input',cInfo));
 $('aup').addEventListener('change',()=>{
  const fl=[...$('aup').files],f=fl[0],o=$('aupinfo');o.textContent='';o.style.color='var(--mist)';if(!f)return;
@@ -2052,7 +2139,7 @@ $('cdlv').onclick=async()=>{
    for(let i=0;i<its.length;i++){const s0=Math.max(0,Math.floor(B[i]*sr)),s1=Math.min(buf.length,Math.floor(B[i+1]*sr)),n=Math.max(1,s1-s0),o=AC.createBuffer(buf.numberOfChannels,n,sr);
     for(let ch=0;ch<buf.numberOfChannels;ch++)o.getChannelData(ch).set(buf.getChannelData(ch).subarray(s0,s0+n));bufs[i]=o}
   }
-  if(c.r.t==='s')await sFill();else await Promise.all(Array.from({length:Math.min(4,its.length)},async()=>{   // ٤ آيات في وقت واحد
+  if(c.r.t==='s')await sFill();else await Promise.all(Array.from({length:Math.min(8,its.length)},async()=>{   // ٨ آيات في وقت واحد
    while(!aerr&&!vcancel){
     const i=nx.v++;if(i>=its.length)break;
     try{const r=await fetch('https://everyayah.com/data/'+c.r.src+'/'+pad(c.s.number,3)+pad(c.a+i,3)+'.mp3');if(!r.ok)throw 0;
@@ -2065,21 +2152,27 @@ $('cdlv').onclick=async()=>{
   const layouts=its.map(it=>fitText(x,it.text+' ﴿'+ar(it.numberInSurah)+'﴾',W-110*K,H*0.58,vfont,K));
   const starts=[];let acc=0.7;bufs.forEach(b=>{starts.push(acc);acc+=b.duration+0.4});const total=acc;
   const title=c.s.name+' — '+c.r.name,mark='وِرد د. موفّق رحمه الله';
+  /* الطبقة النصية (العنوان + الآية + العلامة) تُرسم مرة واحدة لكل آية لا في كل إطار: ظل النص مكلف جدًا */
+  let ovI=-2;const ov=document.createElement('canvas');ov.width=W;ov.height=H;const ox=ov.getContext('2d');
+  function drawOv(i){
+   ox.clearRect(0,0,W,H);ox.textAlign='center';ox.textBaseline='middle';ox.direction='rtl';
+   ox.font=(34*K)+'px "Reem Kufi",serif';ox.fillStyle='#d4aa55';ox.fillText(title,W/2,90*K);
+   if(i>=0){const L=layouts[i];ox.font=L.fs+'px "'+vfont+'",serif';ox.fillStyle='#fff';ox.shadowColor='rgba(0,0,0,.85)';ox.shadowBlur=14;
+    const y0=H/2-(L.lines.length-1)*L.lh/2;L.lines.forEach((ln,j)=>ox.fillText(ln,W/2,y0+j*L.lh));ox.shadowBlur=0}
+   ox.font=(28*K)+'px "Reem Kufi",serif';ox.fillStyle='rgba(238,243,238,.8)';ox.fillText(mark,W/2,H-80*K);
+  }
   function frame(t){
    if(v&&v.tagName==='IMG'&&v.naturalWidth){const sc=Math.max(W/v.naturalWidth,H/v.naturalHeight),w=v.naturalWidth*sc,h=v.naturalHeight*sc;x.drawImage(v,(W-w)/2,(H-h)/2,w,h)}
    else if(v&&v.readyState>=2&&v.videoWidth){const sc=Math.max(W/v.videoWidth,H/v.videoHeight),w=v.videoWidth*sc,h=v.videoHeight*sc;x.drawImage(v,(W-w)/2,(H-h)/2,w,h)}
    else{const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0e2623');g.addColorStop(1,'#1b4a42');x.fillStyle=g;x.fillRect(0,0,W,H)}
    x.fillStyle='rgba(0,0,0,.5)';x.fillRect(0,0,W,H);
-   x.textAlign='center';x.textBaseline='middle';x.direction='rtl';
-   x.font=(34*K)+'px "Reem Kufi",serif';x.fillStyle='#d4aa55';x.fillText(title,W/2,90*K);
    let i=-1;for(let k=0;k<starts.length;k++)if(t>=starts[k]-0.1)i=k;
-   if(i>=0){const L=layouts[i];x.font=L.fs+'px "'+vfont+'",serif';x.fillStyle='#fff';x.shadowColor='rgba(0,0,0,.85)';x.shadowBlur=14;
-    const y0=H/2-(L.lines.length-1)*L.lh/2;L.lines.forEach((ln,j)=>x.fillText(ln,W/2,y0+j*L.lh));x.shadowBlur=0}
-   x.font=(28*K)+'px "Reem Kufi",serif';x.fillStyle='rgba(238,243,238,.8)';x.fillText(mark,W/2,H-80*K);
+   if(i!==ovI){ovI=i;drawOv(i)}
+   x.drawImage(ov,0,0);
   }
   /* المسار السريع */
   async function fastRender(){
-   const FPS=Math.min(Z.fps,(total>90?12:total>40?15:20)+(Z.q===3?4:0)),SR=AC.sampleRate;
+   let FPS=Math.min(Z.fps,(total>90?12:total>40?15:20)+(Z.q===3?4:0));const SR=AC.sampleRate;
    const vc={codec:'avc1.640028',width:W,height:H,bitrate:Z.br,framerate:FPS};
    if(!(await VideoEncoder.isConfigSupported(vc)).supported)throw new Error('novideo');
    let ac={codec:'mp4a.40.2',sampleRate:SR,numberOfChannels:2,bitrate:128000},acodec='aac';
@@ -2087,6 +2180,7 @@ $('cdlv').onclick=async()=>{
    const total_=Math.ceil((total+0.3)*SR),mix=[new Float32Array(total_),new Float32Array(total_)];
    bufs.forEach((b,i)=>{const off=Math.round(starts[i]*SR);for(let ch=0;ch<2;ch++){const src=b.getChannelData(Math.min(ch,b.numberOfChannels-1)),dst=mix[ch],m=Math.min(src.length,total_-off);for(let k=0;k<m;k++)dst[off+k]+=src[k]}});
    if(bgP){try{const bb=await bgP;if(bb){bgUrl=URL.createObjectURL(bb);if(isImg(url)){const e=new Image();e.src=bgUrl;try{await e.decode();v=e}catch(_){dbg(_)}}else{const e=document.createElement('video');e.muted=true;e.playsInline=true;e.preload='auto';e.src=bgUrl;if(await waitLoad(e,15000))v=e}}}catch(e){dbg(e)}}
+   {const vidBg=!!(v&&v.tagName!=='IMG'&&isFinite(v.duration)&&v.duration>0);FPS=Math.max(6,Math.min(FPS,vidBg?Z.bgf:8));vc.framerate=FPS}   // لا فائدة من إطارات أكثر مما يتغير فعلًا: صورة ثابتة ٨ إطارات، وفيديو خلفية بقدر تحديثه
    const muxer=new Mp4Muxer.Muxer({target:new Mp4Muxer.ArrayBufferTarget(),video:{codec:'avc',width:W,height:H},audio:{codec:acodec,numberOfChannels:2,sampleRate:SR},fastStart:'in-memory',firstTimestampBehavior:'offset'});
    let err=null;
    const ve=new VideoEncoder({output:(ch,m)=>muxer.addVideoChunk(ch,m),error:e=>{err=e}});ve.configure(vc);
@@ -2189,8 +2283,8 @@ addEventListener('beforeinstallprompt',e=>{
 });
 addEventListener('appinstalled',()=>{const b=document.getElementById('inst');if(b)b.remove()});
 </script>
-<script>window.wirdIsOwner=function(){try{return isOwner()}catch(e){return false}};</script>
+<script>window.WIRD_NO_FAB=true;window.wirdIsOwner=function(){try{return isOwner()}catch(e){return false}};</script>
 <script src="wird-search.js" defer></script>
-<script>document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('ayq');if(b)b.onclick=function(){if(window.WirdSearch)WirdSearch.open()}});</script>
+<script>document.addEventListener('DOMContentLoaded',function(){var b=document.getElementById('cmp3all');if(b)b.onclick=function(){if(window.WirdSearch)WirdSearch.open()}});</script>
 </body>
 </html>

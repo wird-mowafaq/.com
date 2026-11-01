@@ -1,5 +1,5 @@
 /* وِرد — Service Worker: تثبيت التطبيق + عمل الواجهة دون اتصال + عرض الإشعارات */
-const V = 'wird-v13';
+const V = 'wird-v14';
 const AD_CACHE = 'wird-adhan';   // ملفات الأذان: تبقى بين الإصدارات وتعمل دون إنترنت
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo.png', 'apple-touch-icon.png', 'icon-maskable-512.png', '404.html', 'quran-downloader.html', 'wird-search.js'];
 

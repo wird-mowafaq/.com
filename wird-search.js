@@ -19,7 +19,7 @@
 
   /* ===================== الإعدادات ===================== */
   var CFG = {
-    FREE_LIMIT: 20,          // حد الزائر العادي
+    FREE_LIMIT: 1e9,         // بلا حد: المصحف كله متاح للجميع
     CONCURRENCY: 6,          // عدد الاتصالات المتوازية
     PAGE: 50,                // عدد النتائج في كل دفعة
     TEXT_URL: 'https://api.alquran.cloud/v1/quran/quran-uthmani',   // للعرض
@@ -37,6 +37,23 @@
       { id: 'shaatree',  name: 'أبو بكر الشاطري',      url: function (a) { return 'https://cdn.islamic.network/quran/audio/128/ar.shaatree/' + a.g + '.mp3'; } }
     ]
   };
+
+  var READERS = null;
+  function p3(n) { return ('00' + n).slice(-3); }
+  // قرّاء الموقع (آية بآية من everyayah) إن وُجدوا، وإلا القائمة الاحتياطية
+  function readers() {
+    if (READERS) return READERS;
+    var site = [];
+    try {
+      if (typeof RECITERS !== 'undefined' && Array.isArray(RECITERS)) {
+        site = RECITERS.filter(function (r) { return r.t === 'a'; }).map(function (r) {
+          return { id: r.src, name: r.name, url: function (a) { return 'https://everyayah.com/data/' + r.src + '/' + p3(a.s) + p3(a.n) + '.mp3'; } };
+        });
+      }
+    } catch (e) {}
+    READERS = site.length ? site : CFG.READERS;
+    return READERS;
+  }
 
   function isOwner() {
     try { if (window.WIRD_OWNER === true) return true; } catch (e) {}
@@ -292,15 +309,16 @@
       '<div class="wsu-row"><label>إلى</label><select data-st></select><select data-at style="max-width:90px"></select></div>' +
       '<div class="wsu-info" data-info></div>' +
       '<label class="wsu-chk" data-pswrap hidden><input type="checkbox" data-ps> ملف منفصل لكل سورة</label>' +
-      '<div class="wsu-row"><button class="wsu-go" data-dl>⬇ تنزيل المقطع MP3</button><button class="wsu-go2" data-dla hidden>⬇ كل نتائج البحث</button><button class="wsu-go2" data-cx hidden>إلغاء</button></div>' +
+      '<div class="wsu-row"><button class="wsu-go" data-dl>⬇ تنزيل المقطع MP3</button><button class="wsu-go2" data-dla hidden>⬇ كل نتائج البحث</button><button class="wsu-go2" data-all>📖 المصحف كله</button><button class="wsu-go2" data-cx hidden>إلغاء</button></div>' +
       '<div class="wsu-prog" data-prog hidden><div data-bar></div></div><div class="wsu-msg" data-msg></div>' +
       '</div></div></div>');
     document.body.appendChild(ov);
     var $ = function (k) { return ov.querySelector('[data-' + k + ']'); };
     ui = { ov: ov, $: $ };
 
-    CFG.READERS.forEach(function (r) { var o = document.createElement('option'); o.value = r.id; o.textContent = r.name; $('rd').appendChild(o); });
-    try { var saved = localStorage.getItem('wsu_reader'); if (saved) $('rd').value = saved; } catch (e) {}
+    readers().forEach(function (r) { var o = document.createElement('option'); o.value = r.id; o.textContent = r.name; $('rd').appendChild(o); });
+    var dfl = readers().filter(function (r) { return /alafasy/i.test(r.id); })[0]; if (dfl) $('rd').value = dfl.id;
+    try { var saved = localStorage.getItem('wsu_reader'); if (saved && readers().some(function (r) { return r.id === saved; })) $('rd').value = saved; } catch (e) {}
     $('rd').onchange = function () { try { localStorage.setItem('wsu_reader', $('rd').value); } catch (e) {} };
 
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
@@ -313,6 +331,7 @@
     $('dl').onclick = function () { run(rangeList(), $('ps').checked); };
     $('dla').onclick = function () { run(st.res, $('ps').checked); };
     $('cx').onclick = function () { if (ctl) ctl.abort(); };
+    $('all').onclick = function () { if (Q) run(Q.ayahs, true); };
   }
 
   function fillSurahs() {
@@ -339,12 +358,12 @@
   }
 
   function info() {
-    if (!Q || !ui) return;
+    if (!Q || !ui || !ui.$('sf').options.length) return;
     var $ = ui.$, owner = isOwner(), n = rangeList().length;
-    $('own').hidden = !owner; $('pswrap').hidden = !owner; $('dla').hidden = !(owner && st.res.length > 0);
+    $('own').hidden = !owner; $('pswrap').hidden = false; $('dla').hidden = !(st.res.length > 0);
     if (st.res.length) $('dla').textContent = '⬇ كل نتائج البحث (' + st.res.length + ')';
     var over = !owner && n > CFG.FREE_LIMIT;
-    $('info').textContent = 'المحدّد: ' + n + ' آية — ' + (owner ? 'بلا حد (صلاحية المالك)' : 'الحد الأقصى ' + CFG.FREE_LIMIT + ' آية');
+    $('info').textContent = 'المحدّد: ' + n + ' آية — بلا حد، ويصلح للمصحف كله (فعّل «ملف منفصل لكل سورة» للأجزاء الكبيرة)';
     $('dl').disabled = busy || over;
   }
 
@@ -378,7 +397,7 @@
   }
 
   function play(a) {
-    var reader = CFG.READERS.filter(function (r) { return r.id === ui.$('rd').value; })[0];
+    var reader = readers().filter(function (r) { return r.id === ui.$('rd').value; })[0];
     if (audio) { audio.pause(); audio = null; if (playingG === a.g) { playingG = null; return; } }
     playingG = a.g; audio = new Audio(reader.url(a));
     audio.onended = function () { playingG = null; };
@@ -393,33 +412,55 @@
     renderMore(); info();
   }
 
+  function sanitize(s) { return String(s).replace(/[^\w.\-]+/g, '_'); }
+  function saveInto(dir, blob, name) {
+    if (dir) {
+      return dir.getFileHandle(name, { create: true }).then(function (fh) { return fh.createWritable(); })
+        .then(function (wr) { return wr.write(blob).then(function () { return wr.close(); }); });
+    }
+    saveBlob(blob, name);
+    return sleep(700);          // فاصل بسيط حتى لا يحجب المتصفح التنزيلات المتتالية
+  }
+
   function run(list, perSurah) {
     if (busy || !list.length) return;
-    var owner = isOwner();
-    if (!owner && list.length > CFG.FREE_LIMIT) { msg('الحد الأقصى ' + CFG.FREE_LIMIT + ' آية.', true); return; }
     if (list.length > 1500 && !perSurah && !confirm('الملف كبير جدًا (' + list.length + ' آية) وقد يستهلك ذاكرة الجهاز. الأفضل «ملف منفصل لكل سورة». هل تتابع؟')) return;
-    var reader = CFG.READERS.filter(function (r) { return r.id === ui.$('rd').value; })[0];
-    var groups = (perSurah && owner) ? groupBySurah(list) : [list], total = list.length, done = 0, $ = ui.$;
-    busy = true; ctl = new AbortController(); $('cx').hidden = false; $('prog').hidden = false; $('bar').style.width = '0'; msg('جارٍ التنزيل…'); info();
-    var tick = function () { done++; $('bar').style.width = (done / total * 100) + '%'; $('msg').textContent = 'جارٍ التنزيل… ' + done + ' / ' + total; };
-    var chain = Promise.resolve();
-    groups.forEach(function (g) {
-      chain = chain.then(function () {
-        return fetchBlob(g, reader, ctl, tick).then(function (blob) {
-          var l = g[g.length - 1];
-          saveBlob(blob, 'wird_' + reader.id + '_' + g[0].s + '-' + g[0].n + '_' + l.s + '-' + l.n + '.mp3');
+    var reader = readers().filter(function (r) { return r.id === ui.$('rd').value; })[0];
+    var groups = perSurah ? groupBySurah(list) : [list], multi = groups.length > 1;
+    // اختيار مجلد الحفظ يحتاج لمسة المستخدم، فيُطلب أولًا (Chrome/Edge على الحاسوب)
+    if (multi && window.showDirectoryPicker) {
+      window.showDirectoryPicker({ mode: 'readwrite' }).then(function (d) { go(d); }, function (e) {
+        if (e && e.name === 'AbortError') msg('أُلغي: لم يُختَر مجلد للحفظ.'); else go(null);
+      });
+    } else go(null);
+
+    function go(dir) {
+      if (!dir && multi && groups.length > 8 && !confirm('سيُنزَّل ' + groups.length + ' ملفًا واحدًا بعد الآخر. إن سألك المتصفح فاسمح بالتنزيلات المتعددة. هل تتابع؟')) return;
+      var total = list.length, done = 0, $ = ui.$;
+      busy = true; ctl = new AbortController(); $('cx').hidden = false; $('prog').hidden = false; $('bar').style.width = '0'; msg('جارٍ التنزيل…'); info();
+      var tick = function () { done++; $('bar').style.width = (done / total * 100) + '%'; $('msg').textContent = 'جارٍ التنزيل… ' + done + ' / ' + total + (multi ? ' (سورة ' + cur + ')' : ''); };
+      var cur = '', chain = Promise.resolve();
+      groups.forEach(function (g) {
+        chain = chain.then(function () {
+          cur = g[0].s;
+          return fetchBlob(g, reader, ctl, tick).then(function (blob) {
+            var f = g[0], l = g[g.length - 1], S = Q.surahs[f.s - 1], part = (f.n !== 1 || l.n !== S.count) ? '_' + f.n + '-' + l.n : '';
+            var name = multi ? p3(f.s) + '_' + sanitize(reader.id) + part + '.mp3'
+                             : 'wird_' + sanitize(reader.id) + '_' + f.s + '-' + f.n + '_' + l.s + '-' + l.n + '.mp3';
+            return saveInto(dir, blob, name);
+          });
         });
       });
-    });
-    chain.then(function () { msg('تم التنزيل ✔ (' + total + ' آية)'); })
-      .catch(function (e) { msg(ctl.signal.aborted && !(e && e.message && /HTTP/.test(e.message)) ? 'أُلغي التنزيل.' : 'تعذّر التنزيل: ' + (e && e.message || e), true); })
-      .then(function () { busy = false; $('cx').hidden = true; $('prog').hidden = true; info(); });
+      chain.then(function () { msg('تم التنزيل ✔ (' + total + ' آية' + (dir ? ' — حُفظت في المجلد الذي اخترته' : '') + ')'); })
+        .catch(function (e) { msg(ctl.signal.aborted && !(e && e.message && /HTTP/.test(e.message)) ? 'أُلغي التنزيل.' : 'تعذّر التنزيل: ' + (e && e.message || e), true); })
+        .then(function () { busy = false; $('cx').hidden = true; $('prog').hidden = true; info(); });
+    }
   }
 
   function open() {
     if (!ui) buildUI();
     ui.ov.classList.add('on'); info();
-    if (Q) { ui.$('q').focus(); return; }
+    if (Q) { if (!ui.$('sf').options.length) { fillSurahs(); doSearch(); } ui.$('q').focus(); return; }
     ui.$('meta').textContent = 'جارٍ تحميل نص المصحف (مرة واحدة فقط)…';
     loadQuran().then(function () { fillSurahs(); doSearch(); ui.$('q').focus(); })
       .catch(function () { ui.$('meta').textContent = 'تعذّر تحميل نص المصحف. تحقّق من الاتصال ثم أعد المحاولة.'; });
@@ -428,11 +469,17 @@
 
   function init() {
     var s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s);
-    var fab = document.createElement('button'); fab.className = 'wsu-fab'; fab.title = 'بحث في الآيات'; fab.textContent = '🔎'; fab.onclick = open;
-    document.body.appendChild(fab);
+    if (!window.WIRD_NO_FAB) {
+      var fab = document.createElement('button'); fab.className = 'wsu-fab'; fab.title = 'بحث في الآيات'; fab.textContent = '🔎'; fab.onclick = open;
+      document.body.appendChild(fab);
+    }
   }
 
-  window.WirdSearch = { open: open, close: close, isOwner: isOwner, _t: { norm: norm, normMap: normMap, highlight: highlight, build: build, westernDigits: westernDigits } };
+  window.WirdSearch = { open: open, close: close, isOwner: isOwner,
+    ready: function () { return loadQuran(); }, loaded: function () { return !!Q; },
+    search: function (q) { return Q ? search(q) : { list: [], tokens: [] }; }, highlight: highlight,
+    surahName: function (n) { return (Q && Q.surahs[n - 1]) ? Q.surahs[n - 1].name : ''; },
+    _t: { norm: norm, normMap: normMap, highlight: highlight, build: build, westernDigits: westernDigits } };
   if (typeof document !== 'undefined' && document.addEventListener) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   }
