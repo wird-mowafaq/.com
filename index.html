@@ -103,6 +103,14 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
 #info button,.ctl button{background:rgba(0,0,0,.45);color:#eef3ee;border:1px solid rgba(255,255,255,.3);border-radius:50%;width:46px;height:46px;font-size:1.2rem;cursor:pointer}
 .ctl{position:absolute;bottom:28px;display:flex;gap:14px;align-items:center}
 .ctl button.play{width:62px;height:62px;background:#d4aa55;color:#10231f;border:0}
+#rtools{position:absolute;top:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:3;max-width:calc(100% - 190px)}
+#rrec{min-width:0;max-width:min(46vw,340px);height:46px;padding:0 16px;background:rgba(0,0,0,.45);color:#eef3ee;border:1px solid rgba(255,255,255,.3);border-radius:23px;font-family:inherit;font-size:.95rem;cursor:pointer}
+#rrec option{color:#111;background:#fff}
+#rrecbtn{flex:0 0 auto;min-width:46px;height:46px;padding:0 12px;border-radius:23px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.3);color:#ff5a5a;font-size:1.05rem;cursor:pointer;font-family:inherit}
+#rrecbtn.on{background:#c62828;color:#fff;border-color:#c62828}
+#rrecbtn.on i{animation:recblink 1.1s ease-in-out infinite}
+@keyframes recblink{50%{opacity:.25}}
+#reader.recording #rrec{display:none}
 #num{position:absolute;bottom:100px;color:#b9cfc8;font-size:.95rem}
 #toast{position:absolute;top:70px;background:rgba(0,0,0,.7);padding:8px 14px;border-radius:8px;font-size:.9rem;display:none;max-width:90%;text-align:center}
 #msg{padding:20px;text-align:center;color:var(--mist)}
@@ -293,6 +301,7 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
  <video id="bg" muted loop playsinline></video><img id="bgimg" alt=""><div id="fallback"></div><div class="shade"></div>
  <div id="info"><span id="title"></span><button id="close" aria-label="إغلاق">✕</button></div>
  <div id="toast"></div>
+ <div id="rtools"><select id="rrec" aria-label="اختيار القارئ"></select><button id="rrecbtn" type="button" aria-label="تسجيل ما تسمعه" title="تسجيل ما تسمعه (صوت وصورة)"><i>⏺</i> <span id="rrect">تسجيل</span></button></div>
  <div id="bgp" hidden><select id="bgpl" aria-label="قائمة الخلفيات"></select><div id="bgpg"></div></div>
  <div id="verse"></div><div id="num"></div>
  <div class="ctl">
@@ -301,8 +310,6 @@ select,input,.btn{flex:1;min-width:150px;background:var(--card);border:1px solid
   <button id="prev" aria-label="الآية التالية">⏮</button>
   <button id="bgbtn" aria-label="الخلفية التالية">🌿</button>
    <button id="bgpick" aria-label="اختيار خلفية">🎞</button>
-  <button id="earlier" aria-label="إظهار الآية أبكر">➕</button>
-  <button id="later" aria-label="إظهار الآية أبطأ">➖</button>
  </div>
 </div>
 <div id="adm" hidden>
@@ -683,7 +690,7 @@ function openReader(start,w){wird=w||null;try{logEv('listen',cr().name,surah.nam
  if(!ayahs.length)return;
  $('title').textContent=surah.name;$('reader').classList.add('on');
  if(document.fullscreenEnabled)$('reader').requestFullscreen().catch(dbg);
- buildItems();tried=0;setBg();go(start<0?0:start+bo);
+ buildItems();tried=0;setBg();fillRdr();go(start<0?0:start+bo);
 
 }
 const BSM='بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';
@@ -854,6 +861,40 @@ setInterval(()=>{
  let p=0;for(let j=0;j<rp.parts.length;j++)if(t>=rp.b[j])p=j;
  if(p!==rp.p)show(vi,p);
 },120);
+/* قائمة القرّاء داخل وضع الاستماع: تغيير القارئ يعيد الآية الحالية بصوته */
+function fillRdr(){const sl=$('rrec'),cur=key(cr());sl.innerHTML='';RECITERS.forEach(r=>sl.add(new Option(rLabel(r),key(r))));sl.value=cur;if(sl.value!==cur&&sl.options.length)sl.selectedIndex=0}
+$('rrec').onchange=()=>{pickR($('rrec').value);fillReciters();go(vi)};
+/* التسجيل أثناء الاستماع: يسجّل صورة الشاشة وصوتها (تبويب الموقع) في ملف يُنزَّل عند الإيقاف */
+let rec=null,rtimer=null;
+const canRec=!!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia&&window.MediaRecorder);
+if(!canRec)$('rrecbtn').hidden=true;
+function recStop(){if(rec&&rec.state!=='inactive')try{rec.stop()}catch(e){dbg(e)}}
+async function recToggle(){
+ if(rec){recStop();return}
+ let st;
+ try{st=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:true,preferCurrentTab:true,selfBrowserSurface:'include',systemAudio:'include'})}
+ catch(e){toast(e&&e.name==='NotAllowedError'?'أُلغي التسجيل':'تعذّر بدء التسجيل على هذا المتصفح');return}
+ if(!st.getAudioTracks().length)toast('لم يُلتقط الصوت: في نافذة الاختيار اختر «هذا التبويب» وفعّل «مشاركة صوت التبويب»');
+ const mt=['video/mp4;codecs=avc1,mp4a.40.2','video/webm;codecs=vp9,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t))||'';
+ const ch=[],mr=new MediaRecorder(st,mt?{mimeType:mt,videoBitsPerSecond:3e6}:undefined);
+ mr.ondataavailable=e=>{if(e.data&&e.data.size)ch.push(e.data)};
+ mr.onstop=()=>{
+  clearInterval(rtimer);st.getTracks().forEach(t=>t.stop());rec=null;
+  $('rrecbtn').classList.remove('on');$('reader').classList.remove('recording');$('rrect').textContent='تسجيل';
+  if(!ch.length){toast('لم يُسجَّل شيء');return}
+  const ty=(mr.mimeType||mt||'video/webm').split(';')[0],ext=/mp4/.test(ty)?'mp4':'webm',d=new Date(),pd=n=>String(n).padStart(2,'0');
+  const nm='wird_'+((surah&&surah.name)||'تلاوة').replace(/\s+/g,'_')+'_'+d.getFullYear()+pd(d.getMonth()+1)+pd(d.getDate())+'-'+pd(d.getHours())+pd(d.getMinutes())+'.'+ext;
+  const u=URL.createObjectURL(new Blob(ch,{type:ty})),a=document.createElement('a');a.href=u;a.download=nm;document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),60000);toast('تم حفظ التسجيل: '+nm);
+ };
+ st.getVideoTracks()[0].onended=recStop;   // إن أوقف المستخدم المشاركة من المتصفح
+ mr.start(1000);rec=mr;
+ const t0=Date.now();$('rrecbtn').classList.add('on');$('reader').classList.add('recording');
+ rtimer=setInterval(()=>{const q=Math.floor((Date.now()-t0)/1000);$('rrect').textContent='إيقاف '+pd2(Math.floor(q/60))+':'+pd2(q%60)},500);
+ $('rrect').textContent='إيقاف 00:00';
+}
+const pd2=n=>String(n).padStart(2,'0');
+$('rrecbtn').onclick=recToggle;
 function nudge(d){
  if(mode!=='s'){toast('هذا القارئ متزامن بدقة ولا يحتاج تعديلًا');return}
  if(aligned){offA+=d;localStorage.setItem('offA',offA)}else{off+=d;localStorage.setItem('off',off)}
@@ -864,7 +905,7 @@ function setPlay(p){playing=p;$('play').textContent=p?'❚❚':'▶'}
 function stop(){AU.forEach(a=>a.pause());setPlay(false)}
 $('play').onclick=()=>playing?stop():audio.play().then(()=>setPlay(true));
 $('next').onclick=()=>go(vi-1);$('prev').onclick=()=>go(vi+1);
-$('close').onclick=()=>{stop();$('reader').classList.remove('on');if(document.fullscreenElement)document.exitFullscreen()};
+$('close').onclick=()=>{recStop();stop();$('reader').classList.remove('on');if(document.fullscreenElement)document.exitFullscreen()};
 document.addEventListener('keydown',e=>{
  if(!$('reader').classList.contains('on'))return;
  if(e.key==='ArrowLeft')go(vi+1);if(e.key==='ArrowRight')go(vi-1);
@@ -911,7 +952,7 @@ function bgFail(){
 }
 bg.onerror=bgFail;
 $('bgbtn').onclick=()=>{bi++;tried=0;setBg()};
-$('earlier').onclick=()=>nudge(0.5);$('later').onclick=()=>nudge(-0.5);
+
 function note(m){toast(m);$('msg').hidden=false;$('msg').textContent=m}
 try{indexedDB.deleteDatabase('nur')}catch(e){dbg(e)} // حذف أي فيديوهات قديمة اختارها أحد من جهازه
 
