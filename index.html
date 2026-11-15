@@ -1134,10 +1134,10 @@ bg.addEventListener('error',()=>{fb.style.display='block'});
 /* ===== لوحة المشرفين (Supabase) ===== */
 const SB_URL=(SB.url||'').replace(/\/$/,''), SB_ON=!!(SB.url&&SB.key);
 let sess=null, role=null, cloud=[];
-try{sess=JSON.parse(sessionStorage.getItem('sbs')||'null')}catch(e){dbg(e)}
+try{sess=JSON.parse(localStorage.getItem('sbs')||sessionStorage.getItem('sbs')||'null')}catch(e){dbg(e)}
 const astat=(m,err)=>{$('astat').textContent=m||'';$('astat').className=err?'err':''};
 const jh=(extra={})=>({apikey:SB.key,Authorization:'Bearer '+(sess?sess.access_token:SB.key),'Content-Type':'application/json',...extra});
-function saveSess(j,email){sess={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+((j.expires_in||3600)-60)*1000,email:((j.user&&j.user.email)||email||(sess&&sess.email)||'').toLowerCase()};sessionStorage.setItem('sbs',JSON.stringify(sess))}
+function saveSess(j,email){sess={access_token:j.access_token,refresh_token:j.refresh_token,exp:Date.now()+((j.expires_in||3600)-60)*1000,email:((j.user&&j.user.email)||email||(sess&&sess.email)||'').toLowerCase()};try{localStorage.setItem('sbs',JSON.stringify(sess))}catch(e){dbg(e)}try{sessionStorage.setItem('sbs',JSON.stringify(sess))}catch(e){dbg(e)}}
 function dropSess(){try{if(sess&&sess.access_token)fetch(SB_URL+'/auth/v1/logout?scope=local',{method:'POST',headers:{apikey:SB.key,Authorization:'Bearer '+sess.access_token}}).catch(dbg)}catch(e){dbg(e)}sess=null;role=null;try{sessionStorage.removeItem('sbs');localStorage.removeItem('sbs')}catch(e){dbg(e)}}
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const KDF=async(x,salt)=>{const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(x),'PBKDF2',false,['deriveBits']);const b=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:new TextEncoder().encode(salt),iterations:200000},k,128);return [...new Uint8Array(b)].map(v=>v.toString(16).padStart(2,'0')).join('')};
