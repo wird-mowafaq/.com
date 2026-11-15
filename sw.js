@@ -1,5 +1,6 @@
 /* وِرد — Service Worker: تثبيت التطبيق + عمل الواجهة دون اتصال + عرض الإشعارات */
-const V = 'wird-v14';
+const V = 'wird-v16';
+const Q_CACHE = 'wird-quran';   // نص القرآن وقائمة السور (من alquran.cloud): يُحفظ للعمل دون إنترنت
 const AD_CACHE = 'wird-adhan';   // ملفات الأذان: تبقى بين الإصدارات وتعمل دون إنترنت
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'logo.png', 'apple-touch-icon.png', 'icon-maskable-512.png', '404.html', 'quran-downloader.html', 'wird-search.js'];
 
@@ -15,7 +16,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(ks => Promise.all(ks.filter(k => k !== V && k !== AD_CACHE).map(k => caches.delete(k))))
+      .then(ks => Promise.all(ks.filter(k => k !== V && k !== AD_CACHE && k !== Q_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -27,6 +28,12 @@ self.addEventListener('fetch', e => {
   // الخطوط: من الكاش إن وُجدت وإلا الشبكة ثم تخزَّن (تعمل دون اتصال بعد أول زيارة)
   if (/(^|\.)fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)) {
     e.respondWith(caches.match(r).then(x => x || fetch(r).then(res => { const cp = res.clone(); caches.open(V).then(c => c.put(r, cp)).catch(() => {}); return res; })));
+    return;
+  }
+  // نص القرآن: الشبكة أولًا (يبقى محدَّثًا) ثم النسخة المحفوظة عند انقطاع الإنترنت
+  if (u.hostname === 'api.alquran.cloud' && /\/v1\/(surah|quran)/.test(u.pathname)) {
+    e.respondWith(fetch(r).then(res => { if (res.ok) { const cp = res.clone(); caches.open(Q_CACHE).then(c => c.put(r.url, cp)).catch(() => {}); } return res; })
+      .catch(() => caches.match(r.url).then(x => x || Response.error())));
     return;
   }
   if (u.origin !== location.origin) return;            // الصوت وواجهات API من الشبكة دائمًا
